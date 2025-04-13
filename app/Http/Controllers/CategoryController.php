@@ -21,43 +21,116 @@ class CategoryController extends Controller
 
     public function create()
     {
-        return view('categories.create');
+        $predefinedCategories = Category::where('user_id', 1)->get();
+        return view('categories.create', compact('predefinedCategories'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'name'=>['required', 'string', 'max:255',Rule::unique('categories')->whereNull('deleted_at')],
+            'predefined_category' => ['nullable', 'exists:categories,id'],
+            'name' => [
+                'nullable',
+                'required_without:predefined_category',
+                'string',
+                'max:255',
+                Rule::unique('categories')->whereNull('deleted_at')
+            ],
             'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
-    $existingCategory=Category::withTrashed()->where('name',$request->name)->first();
-        if ($existingCategory){
-            $existingCategory->restore();
-            if ($existingCategory->user_id !== Auth::id()) {
-                $existingCategory->user_id = Auth::id();
-                $existingCategory->save();
+
+        if ($request->predefined_category) {
+            $category = Category::findOrFail($request->predefined_category);
+
+            if (Auth::user()->categories->contains($category)) {
+                Auth::user()->categories()->updateExistingPivot($category->id, [
+                    'budget_percentage' => $request->budget_percentage
+                ]);
+                return redirect()->route('categories.index')
+                    ->with('success', 'Category budget updated successfully.');
             }
-            if (!$existingCategory->users->contains(Auth::id())) {
-                Auth::user()->categories()->attach($existingCategory->id, ['budget_percentage' => $request->budget_percentage]);
-            }
-            return redirect()->route('categories.index')->with('success', 'Category restored successfully.');
+
+            Auth::user()->categories()->attach($category->id, [
+                'budget_percentage' => $request->budget_percentage
+            ]);
+            return redirect()->route('categories.index')
+                ->with('success', 'Predefined category added successfully.');
         }
-        $category=Category::firstOrcreate([
-            'name'=>$request->name,
-            'user_id'=>Auth::id(),
+
+        $existingCategory = Category::withTrashed()
+            ->where('name', $request->name)
+            ->first();
+
+        if ($existingCategory) {
+            if ($existingCategory->trashed()) {
+                $existingCategory->restore();
+
+                if ($existingCategory->user_id !== Auth::id()) {
+                    $existingCategory->user_id = Auth::id();
+                    $existingCategory->save();
+                }
+
+                if (!$existingCategory->users->contains(Auth::id())) {
+                    Auth::user()->categories()->attach($existingCategory->id, [
+                        'budget_percentage' => $request->budget_percentage
+                    ]);
+                } else {
+                    Auth::user()->categories()->updateExistingPivot($existingCategory->id, [
+                        'budget_percentage' => $request->budget_percentage
+                    ]);
+                }
+
+                return redirect()->route('categories.index')
+                    ->with('success', 'Category restored successfully.');
+            }
+        }
+
+        $category = Category::create([
+            'name' => $request->name,
+            'user_id' => Auth::id(),
         ]);
 
-        Auth::user()->categories()->attach($category->id,['budget_percentage' => $request->budget_percentage]);
-        return redirect()->route('categories.index')->with('success','Category created successfully');
+        Auth::user()->categories()->attach($category->id, [
+            'budget_percentage' => $request->budget_percentage
+        ]);
+
+        return redirect()->route('categories.index')
+            ->with('success', 'Category created successfully.');
     }
 
-
+//    public function store(Request $request)
+//    {
+//        $request->validate([
+//            'name'=>['required', 'string', 'max:255',Rule::unique('categories')->whereNull('deleted_at')],
+//            'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+//        ]);
+//    $existingCategory=Category::withTrashed()->where('name',$request->name)->first();
+//        if ($existingCategory){
+//            $existingCategory->restore();
+//            if ($existingCategory->user_id !== Auth::id()) {
+//                $existingCategory->user_id = Auth::id();
+//                $existingCategory->save();
+//            }
+//            if (!$existingCategory->users->contains(Auth::id())) {
+//                Auth::user()->categories()->attach($existingCategory->id, ['budget_percentage' => $request->budget_percentage]);
+//            }
+//            return redirect()->route('categories.index')->with('success', 'Category restored successfully.');
+//        }
+//        $category=Category::firstOrcreate([
+//            'name'=>$request->name,
+//            'user_id'=>Auth::id(),
+//        ]);
+//
+//        Auth::user()->categories()->attach($category->id,['budget_percentage' => $request->budget_percentage]);
+//        return redirect()->route('categories.index')->with('success','Category created successfully');
+//    }
     public function edit(Category $category)
     {
+//        $category = Category::findOrFail($category->id);
         $user = Auth::user();
 
         if (!$user->categories->contains($category)) {
-            abort(403, 'Unauthorized action.');
+            abort(401);
         }
         $categoryWithPivot = $user->categories()->where('categories.id', $category->id)->first();
         return view('categories.edit', compact('categoryWithPivot'));
@@ -65,6 +138,7 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
+        $category = Category::findOrFail($category->id);
         if(!Auth::user()->categories->contains($category))
         {
             abort(403,'Unauthorized action.');
@@ -97,6 +171,7 @@ class CategoryController extends Controller
 //    }
 public function destroy(Category $category)
     {
+        $category = Category::findOrFail($category->id);
         if (Auth::user()->hasRole('admin')) {
             $category->delete();
             return redirect()->route('admin.dashboard')->with('success', 'Category deleted successfully (soft deleted).');
@@ -107,7 +182,11 @@ public function destroy(Category $category)
             Auth::user()->categories()->detach($category->id);
 
             if ($category->user_id !== 1) {
-                $category->delete();
+                $otherUsersCount = $category->users()->count();
+                if($otherUsersCount > 0)
+                {
+                    $category->delete();
+                }
             }
 
             return redirect()->route('categories.index')->with('success', 'Category deleted successfully.');
@@ -115,4 +194,20 @@ public function destroy(Category $category)
         abort(403, 'Unauthorized action.');
     }
 
+    public function forceDelete($id)
+    {
+        if (!Auth::user()->hasRole('admin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $category = Category::withTrashed()->findOrFail($id);
+
+        $category->users()->detach();
+
+        $category->forceDelete();
+
+        return redirect()->route('admin.dashboard')
+            ->with('success', 'Category permanently deleted.');
+    }
 }
+

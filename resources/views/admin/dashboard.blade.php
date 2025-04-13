@@ -1,4 +1,5 @@
-
+@extends('layouts.app')
+@section('content')
     <div class="container">
         <h1 class="mb-4">Admin Dashboard</h1>
 
@@ -14,7 +15,7 @@
             </div>
         </div>
     </div>
-    <table>
+    <table class="table">
         <thead>
         <tr>
             <th>Category Name</th>
@@ -31,17 +32,32 @@
                 <td>{{ $category->users_count }}</td>
                 <td>
                     @if(Auth::user()->hasRole('admin'))
-                        <form action="{{ route('categories.destroy', $category->id) }}" method="POST" style="display:inline;">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure? This will soft delete the category.')">
-                                Delete
-                            </button>
-                        </form>
+                        <div class="btn-group" role="group">
+                            <!-- Soft Delete Button -->
+                            <form action="{{ route('categories.destroy', $category->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-warning btn-sm"
+                                        onclick="return confirm('Are you sure? This will soft delete the category.')">
+                                    Soft Delete
+                                </button>
+                            </form>
+
+                            <!-- Force Delete Button -->
+                            <form action="{{ route('categories.forceDelete', $category->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-danger btn-sm"
+                                        onclick="return confirm('WARNING: This will permanently delete the category and cannot be undone. Are you sure?')">
+                                    Force Delete
+                                </button>
+                            </form>
+                        </div>
                     @endif
                 </td>
             </tr>
         @endforeach
         </tbody>
     </table>
+@endsection
 

@@ -60,6 +60,38 @@
             <div class="text-green-400 mb-4">{{ session('success') }}</div>
         @endif
 
+        <div class="mb-6 bg-gray-700 p-4 rounded-lg">
+            <div class="flex items-center justify-between mb-4">
+                <div class="text-xl font-semibold">
+                    Total Expenses: Rs.{{ number_format($totalExpenses, 2) }}
+                </div>
+            </div>
+
+            <form action="{{ route('expenses.index') }}" method="GET" class="flex items-center space-x-4">
+                <div class="flex items-center space-x-4">
+                    <div>
+                        <label for="start_date" class="block text-sm font-medium text-gray-300">From Date</label>
+                        <input type="date"
+                               name="start_date"
+                               id="start_date"
+                               value="{{ $startDate->format('Y-m-d') }}"
+                               class="mt-1 bg-gray-600 text-white px-4 py-2 rounded-md">
+                    </div>
+                    <div>
+                        <label for="end_date" class="block text-sm font-medium text-gray-300">To Date</label>
+                        <input type="date"
+                               name="end_date"
+                               id="end_date"
+                               value="{{ $endDate->format('Y-m-d') }}"
+                               class="mt-1 bg-gray-600 text-white px-4 py-2 rounded-md">
+                    </div>
+                </div>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-700 mt-6">
+                    Filter
+                </button>
+            </form>
+        </div>
+
         <div class="w-full">
             <table class="w-full border-collapse border border-gray-600">
                 <thead>
@@ -78,14 +110,19 @@
                         <td class="border border-gray-500 px-6 py-3">{{ $expense->category->name ?? 'N/A' }}</td>
                         <td class="border border-gray-500 px-6 py-3">Rs.{{ number_format($expense->amount, 2) }}</td>
                         <td class="border border-gray-500 px-6 py-3">{{ $expense->description ?? 'N/A' }}</td>
-                        <td class="border border-gray-500 px-6 py-3 text-center">
-                            <form action="{{ route('expenses.destroy', $expense->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this expense?');">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-800">
-                                    Delete
-                                </button>
-                            </form>
+                        <td class="border border-gray-500 px-6 py-3">
+                            <div class="flex justify-center space-x-2">
+                                <a href="{{ route('expenses.edit', $expense) }}" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                                    Edit
+                                </a>
+                                <form action="{{ route('expenses.destroy', $expense) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this expense?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-800">
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 @empty
@@ -97,6 +134,9 @@
             </table>
         </div>
 
+        <div class="mt-4">
+            {{ $expenses->links() }}
+        </div>
 
     </div>
 @endsection

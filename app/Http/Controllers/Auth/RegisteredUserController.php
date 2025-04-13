@@ -16,9 +16,6 @@ use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
 {
-    /**
-     * Display the registration view.
-     */
     public function create(): View
     {
         return view('auth.register');
@@ -29,29 +26,10 @@ class RegisteredUserController extends Controller
      *
      * @throws \Illuminate\Validation\ValidationException
      */
-//    public function store(Request $request): RedirectResponse
-//    {
-//        $request->validate([
-//            'name' => ['required', 'string', 'max:255'],
-//            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
-//            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-//        ]);
-//
-//        $user = User::create([
-//            'name' => $request->name,
-//            'email' => $request->email,
-//            'password' => Hash::make($request->password),
-//        ]);
-//
-//        event(new Registered($user));
-//
-//        Auth::login($user);
-//
-//        return redirect(route('dashboard', absolute: false));
-//    }
 
     public function store(Request $request): RedirectResponse
     {
+
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
@@ -72,16 +50,15 @@ class RegisteredUserController extends Controller
 
         return redirect()->route('register.income');
     }
-
     public function showCategories(Request $request)
     {
-//        $categories=Category::where('user_id',1)->get();
         $categories = Category::whereBetween('id',[1,6])->get();
         return view('auth.categories', compact('categories'));
     }
 
     public function storeCategories(Request $request)
     {
+//        dd($request->all());
 //        dd($request->categories);
         $request->validate([
             'categories' => ['required', 'array'],
@@ -91,17 +68,36 @@ class RegisteredUserController extends Controller
         if ($request->has('categories')) {
             $user->categories()->syncWithoutDetaching($request->categories);
         }
+//        if($request->filled('custom_category')) {
+//            $customCategory=Category::create([
+//                'name'=> $request->custom_category,
+//                'budget_amount'=>0,
+//            ]);
+//            $user->categories()->attach($customCategory->id);
+//        }
         if($request->filled('custom_category')) {
-            $customCategory=Category::create([
-                'name'=> $request->custom_category,
-                'budget_amount'=>0,
-            ]);
-            $user->categories()->attach($customCategory->id);
+            $existingCategory = Category::withTrashed()
+                ->where('name', $request->custom_category)
+                ->first();
+
+            if ($existingCategory) {
+                if ($existingCategory->trashed()) {
+                    $existingCategory->restore();
+                }
+                if (!$existingCategory->users->contains($user->id)) {
+                    $user->categories()->attach($existingCategory->id);
+                }
+            } else {
+                $customCategory = Category::create([
+                    'name' => $request->custom_category,
+                    'user_id' => $user->id,
+                ]);
+                $user->categories()->attach($customCategory->id);
+            }
         }
 
         return redirect()->route('register.budget');
     }
-
     public function showIncome()
     {
         return view('auth.income');
@@ -128,6 +124,7 @@ class RegisteredUserController extends Controller
     }
     public function storeBudget(Request $request)
     {
+//        dd('stop');
 //        dd($request->percentages);
         $request->validate([
             'percentages' => ['required', 'array'],
