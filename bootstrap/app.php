@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\CheckIncomeSet;
 use App\Http\Middleware\CheckInitialRegistration;
+use \App\Http\Middleware\RedirectIfRegistrationComplete;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'check.income' => CheckIncomeSet::class,
             'check.initial.registration' => CheckInitialRegistration::class,
+            'redirect.if.initial.registration.complete' => RedirectIfRegistrationComplete::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

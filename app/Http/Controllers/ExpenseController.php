@@ -24,8 +24,9 @@ class ExpenseController extends Controller
         $currentMonthStart = now()->startOfMonth();
         $currentMonthEnd = now()->endOfMonth();
 
-        $categories = $user->categories()->with(['expenses' => function ($query) use ($currentMonthStart, $currentMonthEnd) {
-            $query->whereBetween('date', [$currentMonthStart, $currentMonthEnd]);
+        $categories = $user->categories()->with(['expenses' => function ($query) use ($currentMonthStart, $currentMonthEnd, $user) {
+            $query->where('user_id' , $user->id)
+                ->whereBetween('date', [$currentMonthStart, $currentMonthEnd]);
         }])->withTrashed()->get();
 
         $categoryWarnings=[];
@@ -33,8 +34,7 @@ class ExpenseController extends Controller
             $budgetPercentage= $category->pivot->budget_percentage;
             $allocatedBudget = ($user->income * $budgetPercentage)/100;
 //            $spentAmount= $category->expenses()->where('user_id', $user->id)->sum('amount');
-            $spentAmount= $category->expenses()->whereBetween('date',[$currentMonthStart, $currentMonthEnd])->sum('amount');
-
+            $spentAmount= $category->expenses()->where('user_id', $user->id)->whereBetween('date',[$currentMonthStart, $currentMonthEnd])->sum('amount');
             $remainingBudget= $allocatedBudget - $spentAmount;
             $budgetUsedPercentage =$allocatedBudget >0?($spentAmount/$allocatedBudget)*100:0;
             if ($remainingBudget < 0) {
@@ -79,7 +79,7 @@ class ExpenseController extends Controller
             'category_id'=>'required',
             'amount'=>'required|numeric|min:0',
             'description'=>'required',
-            'date'=>'required',
+            'date'=>['required','date','before:tomorrow']
         ]);
         $user=Auth::user();
         $categoryBudgetPercentage =$user->categories()
@@ -90,8 +90,8 @@ class ExpenseController extends Controller
             return back()->withErrors(['category_id' => 'Invalid category selection.']);
         }
         $categoryBudget=($user->income * $categoryBudgetPercentage)/100;
-//        $totalExpenses=Expense::where('user_id',$user->id)->where('category_id',$request->category_id)->sum('amount');
-        $totalExpenses=Expense::where('category_id',$request->category_id)->sum('amount');
+        $totalExpenses=Expense::where('user_id',$user->id)->where('category_id',$request->category_id)->sum('amount');
+//        $totalExpenses=Expense::where('category_id',$request->category_id)->sum('amount');
         $user->expenses()->create([
             'category_id'=> $request->category_id,
             'amount'=> $request->amount,
@@ -101,7 +101,6 @@ class ExpenseController extends Controller
 
         return redirect()->route('expenses.index')->with('success','Expense added successfully.');
     }
-
     public function edit(Expense $expense)
     {
         if ($expense->user_id !== Auth::id()) {
@@ -113,7 +112,6 @@ class ExpenseController extends Controller
         $formattedDate = Carbon::parse($expense->date)->format('Y-m-d');
         return view('expenses.edit', compact('expense', 'categories', 'formattedDate'));
     }
-
     public function update(Request $request, Expense $expense)
     {
         if ($expense->user_id !== Auth::id()) {
@@ -124,7 +122,7 @@ class ExpenseController extends Controller
             'category_id' => 'required',
             'amount' => 'required|numeric|min:0',
             'description' => 'required',
-            'date' => 'required',
+            'date' => ['required','date','before:tomorrow']
         ]);
 
         $user = Auth::user();

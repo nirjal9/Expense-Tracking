@@ -61,7 +61,7 @@ class RegisteredUserController extends Controller
 //        dd($request->all());
 //        dd($request->categories);
         $request->validate([
-            'categories' => ['required', 'array'],
+            'categories' => ['required_without:custom_category', 'array'],
             'custom_category' => ['nullable', 'string', 'max:255'],
         ]);
         $user=Auth::user();
@@ -128,11 +128,12 @@ class RegisteredUserController extends Controller
 //        dd($request->percentages);
         $request->validate([
             'percentages' => ['required', 'array'],
-            'percentages.*' => ['regex:/^\d+(\.\d{1,2})?$/', 'min:0'],
+//            'percentages.*' => ['regex:/^\d+(\.\d{1,2})?$/', 'min:0'],
+            'percentages.*' => ['required', 'numeric', 'min:1', 'max:100'],
         ]);
         $totalPercentage=array_sum($request->percentages);
         if($totalPercentage>100){
-            return back()->withErrors(['total' => 'total must be less than 100']);
+            return back()->withErrors(['total' => 'total must be less than 100'])->withInput();
         }
         $user = Auth::user();
         foreach ($request->percentages as $categoryId => $percentage) {

@@ -35,11 +35,12 @@ Route::middleware('guest')->group(function () {
         ->name('password.store');
 });
 // Registration routes (accessible to both guests and authenticated users)
-Route::get('register', [RegisteredUserController::class, 'create'])
-    ->name('register');
+Route::middleware(['check.initial.registration', 'redirect.if.initial.registration.complete'])->group(function () {
+    Route::get('register', [RegisteredUserController::class, 'create'])
+        ->name('register');
 
-Route::post('register', [RegisteredUserController::class, 'store']);
-
+    Route::post('register', [RegisteredUserController::class, 'store']);
+});
 Route::middleware('auth')->group(function () {
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');

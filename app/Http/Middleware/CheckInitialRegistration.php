@@ -36,22 +36,48 @@ class CheckInitialRegistration
 //        return $next($request);
 //    }
 
+//    public function handle(Request $request, Closure $next): Response
+//    {
+//        if (!Auth::check()) {
+//            return $next($request);
+//        }
+//
+//        if (!Auth::user()->is_completed) {
+//            if ($request->routeIs('register')) {
+//                return redirect()->route('register.income');
+//            }
+//            if ($request->routeIs('register.income*') || $request->routeIs('register.categories*') || $request->routeIs('register.budget*')) {
+//                return $next($request);
+//            }
+//            return redirect()->route('register.income');
+//        }
+//
+//        return $next($request);
+//    }
     public function handle(Request $request, Closure $next): Response
     {
         if (!Auth::check()) {
-            return redirect('register');
+            if ($request->routeIs('register.income*') ||
+                $request->routeIs('register.categories*') ||
+                $request->routeIs('register.budget*')) {
+                return redirect()->route('register');
+            }
+            return $next($request);
         }
 
         if (!Auth::user()->is_completed) {
             if ($request->routeIs('register')) {
                 return redirect()->route('register.income');
             }
-            if ($request->routeIs('register.income*') || $request->routeIs('register.categories*') || $request->routeIs('register.budget*')) {
+
+            if ($request->routeIs('register.income*') ||
+                $request->routeIs('register.categories*') ||
+                $request->routeIs('register.budget*')) {
                 return $next($request);
             }
+
             return redirect()->route('register.income');
         }
 
         return $next($request);
-    }
-}
+    }}

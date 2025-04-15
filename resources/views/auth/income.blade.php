@@ -2,11 +2,13 @@
     <form method="POST" action="{{ route('register.income') }}">
         @csrf
 
-        <h2 class="text-xl font-bold mb-4 text-white">Enter Your Monthly Income</h2>
+        <h2 class="text-xl font-bold mb-4 text-white">Enter Your Income</h2>
 
         <div>
             <x-input-label for="income" :value="__('Income')" class="text-white" />
-            <x-text-input id="income" class="block mt-1 w-full" type="number" name="income" required />
+            <x-text-input id="income" class="block mt-1 w-full" type="number" name="income" step="0.01"
+                          min="0"
+                          max="999999999999.99" required />
             <x-input-error :messages="$errors->get('income')" class="mt-2"/>
         </div>
         <div class="mt-4">

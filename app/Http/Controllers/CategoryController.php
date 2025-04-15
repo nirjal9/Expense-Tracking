@@ -18,7 +18,6 @@ class CategoryController extends Controller
         $categories=$user->categories()->withPivot('budget_percentage')->get();
         return view('categories.index',compact('categories'));
     }
-
     public function create()
     {
         $predefinedCategories = Category::where('user_id', 1)->get();
@@ -38,6 +37,14 @@ class CategoryController extends Controller
             ],
             'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
+
+        $totalBudgetPercentage = Auth::user()->categories()->withPivot('budget_percentage')->sum('category_user.budget_percentage') + $request->budget_percentage;
+
+        if ($totalBudgetPercentage > 100) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['budget_percentage' => 'The total budget percentage cannot exceed 100%. Current total: ' . ($totalBudgetPercentage - $request->budget_percentage) . '%']);
+        }
 
         if ($request->predefined_category) {
             $category = Category::findOrFail($request->predefined_category);
@@ -181,15 +188,16 @@ public function destroy(Category $category)
         {
             Auth::user()->categories()->detach($category->id);
 
-            if ($category->user_id !== 1) {
+            if ($category->user_id === Auth::id() && $category->user_id !== 1) {
                 $otherUsersCount = $category->users()->count();
-                if($otherUsersCount > 0)
+                if($otherUsersCount === 0)
                 {
                     $category->delete();
+                    return redirect()->route('categories.index')->with('success', 'Category deleted successfully.');
                 }
             }
 
-            return redirect()->route('categories.index')->with('success', 'Category deleted successfully.');
+            return redirect()->route('categories.index')->with('success', 'Category removed from your list successfully.');
         }
         abort(403, 'Unauthorized action.');
     }

@@ -31,6 +31,11 @@
                         {{ __('Categories') }}
                     </x-nav-link>
                 </div>
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('register.income')" :active="request()->routeIs('register.income')">
+                        {{ __('Income') }}
+                    </x-nav-link>
+                </div>
                 @if(Auth::check() &&Auth::user()->hasRole('admin'))
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
