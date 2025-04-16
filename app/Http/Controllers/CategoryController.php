@@ -151,9 +151,42 @@ class CategoryController extends Controller
             abort(403,'Unauthorized action.');
         }
         $request->validate([
-            'name'=>['required', 'string', 'max:255','unique:categories,name,'.$category->id],
+            'name'=>['required', 'string', 'max:255'],
             'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100']
         ]);
+        $isSharedCategory = $category->users()->count() > 1;
+
+        $existingCategory = Category::where('name', $request->name)
+            ->where('id', '!=', $category->id)
+            ->first();
+
+        if ($existingCategory) {
+            Auth::user()->categories()->attach($existingCategory->id, [
+                'budget_percentage' => $request->budget_percentage
+            ]);
+
+            Auth::user()->categories()->detach($category->id);
+
+            return redirect()->route('categories.index')
+                ->with('success', 'Category updated successfully. You have been attached to the existing category.');
+        }
+
+        if ($isSharedCategory) {
+            $newCategory = Category::create([
+                'name' => $request->name,
+                'user_id' => Auth::id(),
+            ]);
+
+            Auth::user()->categories()->attach($newCategory->id, [
+                'budget_percentage' => $request->budget_percentage
+            ]);
+
+            Auth::user()->categories()->detach($category->id);
+
+            return redirect()->route('categories.index')
+                ->with('success', 'Category updated successfully. A new category was created since the original was shared with other users.');
+        }
+
         $category->update(['name'=>$request->name]);
         Auth::user()->categories()->updateExistingPivot($category->id, ['budget_percentage' => $request->budget_percentage]);
         return redirect()->route('categories.index')->with('success','Category updated successfully');
