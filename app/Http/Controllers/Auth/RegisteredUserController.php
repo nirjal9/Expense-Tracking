@@ -31,7 +31,7 @@ class RegisteredUserController extends Controller
     {
 
         $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255','regex:/^[a-zA-Z\s]+$/'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
@@ -105,7 +105,7 @@ class RegisteredUserController extends Controller
     public function storeIncome(Request $request)
     {
         $request->validate([
-            'income' => ['required', 'numeric', 'min:0'],
+            'income' => ['required', 'numeric', 'min:0','max:999999999999.99'],
             'income_type' => ['required', 'in:monthly,yearly'],
         ]);
         $income = $request->income;

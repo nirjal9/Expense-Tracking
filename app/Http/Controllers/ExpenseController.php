@@ -21,6 +21,9 @@ class ExpenseController extends Controller
 
         $startDate = $request->input('start_date')?Carbon::parse($request->input('start_date'))->startOfDay():now()->startOfMonth();
         $endDate = $request->input('end_date')?Carbon::parse($request->input('end_date'))->endOfday():now()->endOfMonth();
+        if ($startDate->gt($endDate)) {
+            return back()->withErrors(['date' => 'Start date cannot be after end date.']);
+        }
         $currentMonthStart = now()->startOfMonth();
         $currentMonthEnd = now()->endOfMonth();
 
@@ -77,8 +80,8 @@ class ExpenseController extends Controller
     {
         $request->validate([
             'category_id'=>'required',
-            'amount'=>'required|numeric|min:0',
-            'description'=>'required',
+            'amount'=>'required|numeric|min:0|max:999999999.99',
+            'description'=>'nullable|string|',
             'date'=>['required','date','before:tomorrow']
         ]);
         $user=Auth::user();
@@ -87,7 +90,7 @@ class ExpenseController extends Controller
             ->first()?->pivot->budget_percentage;
 
         if ($categoryBudgetPercentage === null) {
-            return back()->withErrors(['category_id' => 'Invalid category selection.']);
+            return back()->withInput()->withErrors(['category_id' => 'Invalid category selection.']);
         }
         $categoryBudget=($user->income * $categoryBudgetPercentage)/100;
         $totalExpenses=Expense::where('user_id',$user->id)->where('category_id',$request->category_id)->sum('amount');
@@ -109,6 +112,11 @@ class ExpenseController extends Controller
 
         $user = Auth::user();
         $categories = $user->categories;
+        $currentCategory = $expense->category;
+
+        if (!$categories->contains($currentCategory)) {
+            $categories->push($currentCategory);
+        }
         $formattedDate = Carbon::parse($expense->date)->format('Y-m-d');
         return view('expenses.edit', compact('expense', 'categories', 'formattedDate'));
     }
@@ -120,8 +128,8 @@ class ExpenseController extends Controller
 
         $request->validate([
             'category_id' => 'required',
-            'amount' => 'required|numeric|min:0',
-            'description' => 'required',
+            'amount' => 'required|numeric|min:0|max:999999999.99',
+            'description' => 'nullable|string',
             'date' => ['required','date','before:tomorrow']
         ]);
 
@@ -129,10 +137,16 @@ class ExpenseController extends Controller
         $categoryBudgetPercentage = $user->categories()
             ->where('category_id', $request->category_id)
             ->first()?->pivot->budget_percentage;
+        $isValidCategory = $user->categories->contains('id', $request->category_id) ||
+            $expense->category_id == $request->category_id;
 
-        if ($categoryBudgetPercentage === null) {
+        if (!$isValidCategory) {
             return back()->withErrors(['category_id' => 'Invalid category selection.']);
         }
+
+//        if ($categoryBudgetPercentage === null) {
+//            return back()->withInput()->withErrors(['category_id' => 'Invalid category selection.']);
+//        }
 
         $expense->update([
             'category_id' => $request->category_id,

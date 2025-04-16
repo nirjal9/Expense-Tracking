@@ -17,6 +17,10 @@ class PermissionMiddleware
     public function handle(Request $request, Closure $next,$permission): Response
     {
         $user = Auth::user();
+
+        if ($user && $user->hasRole('admin')) {
+            return $next($request);
+        }
         if (!$user || !$user->hasPermission($permission)) {
             abort(403, 'Unauthorized. Missing permission: ' . $permission);
         }

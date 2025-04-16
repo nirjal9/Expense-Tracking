@@ -76,6 +76,9 @@
                                id="start_date"
                                value="{{ $startDate->format('Y-m-d') }}"
                                class="mt-1 bg-gray-600 text-white px-4 py-2 rounded-md">
+                        @error('date')
+                        <p class="text-red-500 mt-1">{{ $message }}</p>
+                        @enderror
                     </div>
                     <div>
                         <label for="end_date" class="block text-sm font-medium text-gray-300">To Date</label>
