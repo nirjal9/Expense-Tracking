@@ -20,7 +20,6 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'income',
         'is_completed',
     ];
 
@@ -54,6 +53,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(Expense::class);
     }
+    public function incomes()
+    {
+        return $this->hasMany(Income::class);
+    }
     public function roles()
     {
         return $this->belongsToMany(Role::class);
@@ -65,6 +68,10 @@ class User extends Authenticatable
     public function hasPermission($permission)
     {
         return $this->roles->flatMap->permissions->contains('name', $permission);
+    }
+    public function getTotalIncomeAttribute()
+    {
+        return $this->incomes->sum('amount');
     }
 
 }

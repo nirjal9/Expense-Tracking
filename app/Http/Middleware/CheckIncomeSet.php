@@ -11,7 +11,9 @@ class CheckIncomeSet
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (!Auth::user()->income || Auth::user()->income == 0) {
+//        if (!Auth::user()->income || Auth::user()->income == 0) {
+        $user = Auth::user();
+        if (!$user->incomes()) {
             return redirect()->route('register.income')->with('error', 'Please set your income first.');
         }
 

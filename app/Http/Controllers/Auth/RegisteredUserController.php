@@ -113,7 +113,12 @@ class RegisteredUserController extends Controller
             $income = round($income / 12, 2);
         }
         $user=Auth::user();
-        $user->update(['income'=>$income]);
+//        $user->update(['income'=>$income]);
+        $user->incomes()->create([
+            'amount' => $income,
+            'date' => now(),
+            'description' => 'Initial income setup'
+        ]);
         return redirect()->route('register.categories');
 
     }

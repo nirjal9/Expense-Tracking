@@ -142,7 +142,6 @@ class CategoryController extends Controller
         $categoryWithPivot = $user->categories()->where('categories.id', $category->id)->first();
         return view('categories.edit', compact('categoryWithPivot'));
     }
-
     public function update(Request $request, Category $category)
     {
         $category = Category::findOrFail($category->id);
@@ -154,6 +153,34 @@ class CategoryController extends Controller
             'name'=>['required', 'string', 'max:255'],
             'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100']
         ]);
+        if ($category->user_id === 1) {
+            $existingCategory = Category::where('name', $request->name)
+                ->where('id', '!=', $category->id)
+                ->first();
+
+            if ($existingCategory) {
+                Auth::user()->categories()->attach($existingCategory->id, [
+                    'budget_percentage' => $request->budget_percentage
+                ]);
+                Auth::user()->categories()->detach($category->id);
+
+                return redirect()->route('categories.index')
+                    ->with('success', 'You have been attached to the existing category.');
+            }
+            $newCategory = Category::create([
+                'name' => $request->name,
+                'user_id' => Auth::id(),
+            ]);
+
+            Auth::user()->categories()->attach($newCategory->id, [
+                'budget_percentage' => $request->budget_percentage
+            ]);
+
+            Auth::user()->categories()->detach($category->id);
+
+            return redirect()->route('categories.index')
+                ->with('success', 'A new category has been created for you.');
+        }
         $isSharedCategory = $category->users()->count() > 1;
 
         $existingCategory = Category::where('name', $request->name)
@@ -168,7 +195,7 @@ class CategoryController extends Controller
             Auth::user()->categories()->detach($category->id);
 
             return redirect()->route('categories.index')
-                ->with('success', 'Category updated successfully. You have been attached to the existing category.');
+                ->with('success', 'Category updated successfully.');
         }
 
         if ($isSharedCategory) {
@@ -184,7 +211,7 @@ class CategoryController extends Controller
             Auth::user()->categories()->detach($category->id);
 
             return redirect()->route('categories.index')
-                ->with('success', 'Category updated successfully. A new category was created since the original was shared with other users.');
+                ->with('success', 'Category updated successfully.');
         }
 
         $category->update(['name'=>$request->name]);
@@ -242,7 +269,6 @@ public function destroy(Category $category)
         }
 
         $category = Category::withTrashed()->findOrFail($id);
-
         $category->users()->detach();
 
         $category->forceDelete();

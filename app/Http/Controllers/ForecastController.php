@@ -70,7 +70,7 @@ class ForecastController extends Controller
     {
         $date =$request->date ? Carbon::parse($request->date) : Carbon::now();
         $user=Auth::user();
-        $income =$user->income;
+        $income =$user->totalIncome;
         $categories= $user->categories()
             ->with(['expenses' => function($query) use($date){
                 $query->whereBetween('date',[$date->copy()->startOfYear()->toDateString(),$date->copy()->endOfMonth()->toDateString()]);
@@ -84,11 +84,15 @@ class ForecastController extends Controller
 
         //sbbai categorues ekkai choti using collection methods
 
-        $forecasts = $categories->map(function ($category) use ($income,$currentMonthStart,$currentMonthEnd, $previousMonthEnd){
-            $budgetPercentage = $category->pivot->budget_percentage??0;
+        $forecasts = $categories->map(function ($category) use ($income,$currentMonthStart,$currentMonthEnd, $previousMonthEnd,$user){
+            $budgetPercentage = $category->pivot->budget_percentage ?? 0;
             $budgetedAmount = ($budgetPercentage/100)*$income;
-            $currentMonthExpenses = $category->expenses->whereBetween('date',[$currentMonthStart,$currentMonthEnd]);
-            $actualExpense= $currentMonthExpenses->sum('amount');
+//            $currentMonthExpenses = $category->expenses->whereBetween('date',[$currentMonthStart,$currentMonthEnd]);
+            $actualExpense = Expense::where('user_id', $user->id)
+                ->where('category_id', $category->id)
+                ->whereBetween('date', [$currentMonthStart, $currentMonthEnd])
+                ->sum('amount');
+//            $actualExpense= $currentMonthExpenses->sum('amount');
             $previousMonthExpenses = $category->expenses->where('date','<=',$previousMonthEnd);
             if ($previousMonthExpenses->isNotEmpty()) {
                 $monthlyExpenses = $previousMonthExpenses->groupBy(function ($expense) {

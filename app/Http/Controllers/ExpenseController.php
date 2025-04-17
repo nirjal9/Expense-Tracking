@@ -18,9 +18,13 @@ class ExpenseController extends Controller
 //        $categories = $user->categories()->with(['expenses.category' => function ($query) {
 //            $query->withTrashed();
 //          }])->withTrashed()->get();
-
+        $request->validate([
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
         $startDate = $request->input('start_date')?Carbon::parse($request->input('start_date'))->startOfDay():now()->startOfMonth();
         $endDate = $request->input('end_date')?Carbon::parse($request->input('end_date'))->endOfday():now()->endOfMonth();
+
         if ($startDate->gt($endDate)) {
             return back()->withErrors(['date' => 'Start date cannot be after end date.']);
         }
@@ -35,7 +39,8 @@ class ExpenseController extends Controller
         $categoryWarnings=[];
         $categoryBudgets = $categories->map(function ($category) use ($user,&$categoryWarnings,$currentMonthStart,$currentMonthEnd) {
             $budgetPercentage= $category->pivot->budget_percentage;
-            $allocatedBudget = ($user->income * $budgetPercentage)/100;
+//            $allocatedBudget = ($user->income * $budgetPercentage)/100;
+            $allocatedBudget = ($user->total_income * $budgetPercentage)/100;
 //            $spentAmount= $category->expenses()->where('user_id', $user->id)->sum('amount');
             $spentAmount= $category->expenses()->where('user_id', $user->id)->whereBetween('date',[$currentMonthStart, $currentMonthEnd])->sum('amount');
             $remainingBudget= $allocatedBudget - $spentAmount;
@@ -92,7 +97,8 @@ class ExpenseController extends Controller
         if ($categoryBudgetPercentage === null) {
             return back()->withInput()->withErrors(['category_id' => 'Invalid category selection.']);
         }
-        $categoryBudget=($user->income * $categoryBudgetPercentage)/100;
+//        $categoryBudget=($user->income * $categoryBudgetPercentage)/100;
+        $categoryBudget=($user->total_income * $categoryBudgetPercentage)/100;
         $totalExpenses=Expense::where('user_id',$user->id)->where('category_id',$request->category_id)->sum('amount');
 //        $totalExpenses=Expense::where('category_id',$request->category_id)->sum('amount');
         $user->expenses()->create([
