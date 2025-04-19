@@ -12,10 +12,18 @@ class CategoryController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = auth()->user();
-        $categories=$user->categories()->withPivot('budget_percentage')->get();
+//        $categories=$user->categories()->withPivot('budget_percentage')->get();
+
+        $query = $user->categories()->withPivot('budget_percentage');
+
+        if ($request->has('search') && !empty($request->search)) {
+            $searchTerm = $request->search;
+            $query->where('name', 'like', '%' . $searchTerm . '%');
+        }
+        $categories = $query->get();
         return view('categories.index',compact('categories'));
     }
     public function create()
@@ -144,7 +152,6 @@ class CategoryController extends Controller
     }
     public function update(Request $request, Category $category)
     {
-        $category = Category::findOrFail($category->id);
         if(!Auth::user()->categories->contains($category))
         {
             abort(403,'Unauthorized action.');

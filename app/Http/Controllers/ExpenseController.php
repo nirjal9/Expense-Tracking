@@ -21,6 +21,11 @@ class ExpenseController extends Controller
         $request->validate([
             'start_date' => ['nullable', 'date_format:Y-m-d'],
             'end_date' => ['nullable', 'date_format:Y-m-d'],
+            'search' => ['nullable', 'string', 'max:255'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'min_amount' => ['nullable', 'numeric', 'min:0'],
+            'max_amount' => ['nullable', 'numeric', 'min:0', 'gte:min_amount'],
+
         ]);
         $startDate = $request->input('start_date')?Carbon::parse($request->input('start_date'))->startOfDay():now()->startOfMonth();
         $endDate = $request->input('end_date')?Carbon::parse($request->input('end_date'))->endOfday():now()->endOfMonth();
@@ -58,10 +63,35 @@ class ExpenseController extends Controller
         });
 //        $expenses = Expense::where('user_id',Auth::id())->get();
 //        return view('expenses.index',compact('expenses','categoryBudgets','categoryWarnings'));
-        $expenses = $user->expenses()
-            ->whereBetween('date', [$startDate, $endDate])
-            ->orderBy('date', 'desc')
-            ->paginate(10);
+//        $expenses = $user->expenses()
+//            ->whereBetween('date', [$startDate, $endDate])
+//            ->orderBy('date', 'desc')
+//            ->paginate(10);
+//        $totalExpenses = $expenses->sum('amount');
+
+        $query = $user->expenses()
+            ->whereBetween('date', [$startDate, $endDate]);
+
+        if ($request->filled('search')) {
+            $searchTerm = $request->input('search');
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('description', 'like', "%{$searchTerm}%");
+            });
+        }
+
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->input('category_id'));
+        }
+
+        if ($request->filled('min_amount')) {
+            $query->where('amount', '>=', $request->input('min_amount'));
+        }
+
+        if ($request->filled('max_amount')) {
+            $query->where('amount', '<=', $request->input('max_amount'));
+        }
+
+        $expenses = $query->orderBy('date', 'desc')->paginate(10);
         $totalExpenses = $expenses->sum('amount');
 
         $months = collect(range(1, 12))->mapWithKeys(function ($month) {
@@ -73,7 +103,13 @@ class ExpenseController extends Controller
         $previousMonth = $currentDate->copy()->subMonth();
         $nextMonth = $currentDate->copy()->addMonth();
 
-        return view('expenses.index', compact('expenses', 'categoryBudgets','categoryWarnings','months','years','startDate','endDate','currentDate','previousMonth','nextMonth','totalExpenses'));
+//        $allCategories = $user->categories()->withTrashed()->get();
+        $allCategories = Category::whereIn('id', function($query) use ($user) {
+            $query->select('category_id')
+                ->from('expenses')
+                ->where('user_id', $user->id);
+        })->withTrashed()->get();
+        return view('expenses.index', compact('expenses', 'categoryBudgets','categoryWarnings','months','years','startDate','endDate','currentDate','previousMonth','nextMonth','totalExpenses','allCategories'));
     }
     public function create()
     {

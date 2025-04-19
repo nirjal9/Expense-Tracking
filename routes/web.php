@@ -9,15 +9,16 @@ use App\Http\Controllers\ForecastController;
 use App\Http\Controllers\AdminController;
 //use App\Http\Middleware\AdminMiddleware;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IncomeController;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified','check.initial.registration'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified','check.initial.registration'])
+    ->name('dashboard');
 
 //Route::middleware(['auth', 'admin'])->group(function () {
 //    Route::get('/permissions', [PermissionController::class, 'index'])->name('permissions.index');
@@ -29,13 +30,19 @@ Route::get('/dashboard', function () {
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/admin/dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::get('/admin/users', [AdminController::class, 'users'])->name('admin.users');
+    Route::get('/admin/categories', [AdminController::class, 'categories'])->name('admin.categories');
+    Route::get('admin/categories/create', [AdminController::class, 'createCategory'])->name('admin.categories.create');
+    Route::post('admin/categories/create', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
 //    Route::delete('/categories/{id}', [CategoryController::class, 'destroy'])->name('categories.delete')
 //        ->middleware('permission:delete-category');
     Route::get('/permissions', [PermissionController::class, 'index'])->name('permissions.index');
     Route::post('/permissions', [PermissionController::class, 'store'])->name('permissions.store');
     Route::delete('/permissions/{role}/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
-    Route::delete('/categories/{category}/force', [CategoryController::class, 'forceDelete'])
-        ->name('categories.forceDelete');
+//    Route::delete('/categories/{category}/force', [AdminController::class, 'forceDelete'])
+//        ->name('categories.forceDelete');
+    Route::get('/admin/categories/{category}/edit', [AdminController::class, 'editCategory'])->name('admin.categories.edit');
+    Route::put('/admin/categories/{category}', [AdminController::class, 'updateCategory'])->name('admin.categories.update');
+    Route::delete('/admin/categories/{category}', [AdminController::class, 'destroyCategory'])->name('admin.categories.delete');
 });
 
 

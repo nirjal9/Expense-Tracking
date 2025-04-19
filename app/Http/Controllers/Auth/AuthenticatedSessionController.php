@@ -33,6 +33,9 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('register.income');
 
         }
+        if($user->hasRole('admin')) {
+            return redirect()->route('admin.dashboard');
+        }
 
         return redirect()->intended(route('dashboard', absolute: false));
     }
