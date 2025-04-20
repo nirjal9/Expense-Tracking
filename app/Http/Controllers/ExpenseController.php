@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ExpenseRequest;
 use App\Models\Category;
 use App\Models\Expense;
 use App\Models\User;
@@ -11,22 +12,22 @@ use Illuminate\Support\Facades\Auth;
 
 class ExpenseController extends Controller
 {
-    public function index(Request $request)
+    public function index(ExpenseRequest $request)
     {
         $user = Auth::user();
 ////        $categories = $user->categories()->with('expenses')->get();
 //        $categories = $user->categories()->with(['expenses.category' => function ($query) {
 //            $query->withTrashed();
 //          }])->withTrashed()->get();
-        $request->validate([
-            'start_date' => ['nullable', 'date_format:Y-m-d'],
-            'end_date' => ['nullable', 'date_format:Y-m-d'],
-            'search' => ['nullable', 'string', 'max:255'],
-            'category_id' => ['nullable', 'exists:categories,id'],
-            'min_amount' => ['nullable', 'numeric', 'min:0'],
-            'max_amount' => ['nullable', 'numeric', 'min:0', 'gte:min_amount'],
-
-        ]);
+//        $request->validate([
+//            'start_date' => ['nullable', 'date_format:Y-m-d'],
+//            'end_date' => ['nullable', 'date_format:Y-m-d'],
+//            'search' => ['nullable', 'string', 'max:255'],
+//            'category_id' => ['nullable', 'exists:categories,id'],
+//            'min_amount' => ['nullable', 'numeric', 'min:0'],
+//            'max_amount' => ['nullable', 'numeric', 'min:0', 'gte:min_amount'],
+//
+//        ]);
         $startDate = $request->input('start_date')?Carbon::parse($request->input('start_date'))->startOfDay():now()->startOfMonth();
         $endDate = $request->input('end_date')?Carbon::parse($request->input('end_date'))->endOfday():now()->endOfMonth();
 
@@ -117,14 +118,8 @@ class ExpenseController extends Controller
         $categories=$user->categories;
         return view('expenses.create',compact('categories'));
     }
-    public function store(Request $request)
+    public function store(ExpenseRequest $request)
     {
-        $request->validate([
-            'category_id'=>'required',
-            'amount'=>'required|numeric|min:0|max:999999999.99',
-            'description'=>'nullable|string|',
-            'date'=>['required','date','before:tomorrow']
-        ]);
         $user=Auth::user();
         $categoryBudgetPercentage =$user->categories()
             ->where('category_id',$request->category_id)
@@ -162,7 +157,7 @@ class ExpenseController extends Controller
         $formattedDate = Carbon::parse($expense->date)->format('Y-m-d');
         return view('expenses.edit', compact('expense', 'categories', 'formattedDate'));
     }
-    public function update(Request $request, Expense $expense)
+    public function update(ExpenseRequest $request, Expense $expense)
     {
         if ($expense->user_id !== Auth::id()) {
             abort(403);
@@ -183,7 +178,7 @@ class ExpenseController extends Controller
             $expense->category_id == $request->category_id;
 
         if (!$isValidCategory) {
-            return back()->withErrors(['category_id' => 'Invalid category selection.']);
+            return back()->withInput()->withErrors(['category_id' => 'Invalid category selection.']);
         }
 
 //        if ($categoryBudgetPercentage === null) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CategoryRequest;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,20 +33,8 @@ class CategoryController extends Controller
         return view('categories.create', compact('predefinedCategories'));
     }
 
-    public function store(Request $request)
+    public function store(CategoryRequest $request)
     {
-        $request->validate([
-            'predefined_category' => ['nullable', 'exists:categories,id'],
-            'name' => [
-                'nullable',
-                'required_without:predefined_category',
-                'string',
-                'max:255',
-                Rule::unique('categories')->whereNull('deleted_at')
-            ],
-            'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
-        ]);
-
         $totalBudgetPercentage = Auth::user()->categories()->withPivot('budget_percentage')->sum('category_user.budget_percentage') + $request->budget_percentage;
 
         if ($totalBudgetPercentage > 100) {
@@ -150,16 +139,16 @@ class CategoryController extends Controller
         $categoryWithPivot = $user->categories()->where('categories.id', $category->id)->first();
         return view('categories.edit', compact('categoryWithPivot'));
     }
-    public function update(Request $request, Category $category)
+    public function update(CategoryRequest $request, Category $category)
     {
         if(!Auth::user()->categories->contains($category))
         {
             abort(403,'Unauthorized action.');
         }
-        $request->validate([
-            'name'=>['required', 'string', 'max:255'],
-            'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100']
-        ]);
+//        $request->validate([
+//            'name'=>['required', 'string', 'max:255'],
+//            'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100']
+//        ]);
         if ($category->user_id === 1) {
             $existingCategory = Category::where('name', $request->name)
                 ->where('id', '!=', $category->id)

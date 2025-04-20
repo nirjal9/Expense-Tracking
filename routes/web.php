@@ -50,26 +50,26 @@ Route::middleware(['auth', 'admin'])->group(function () {
 //Route::post('/register/categories',[RegisteredUserController::class,'storeCategories'])->name('register.categories.store')->middleware(['auth', 'check.income']);
 Route::get('/register/categories',[RegisteredUserController::class,'showCategories'])
     ->name('register.categories')
-    ->middleware(['check.initial.registration', 'check.income','redirect.if.initial.registration.complete']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration', 'check.income']);
 
 Route::post('/register/categories',[RegisteredUserController::class,'storeCategories'])
     ->name('register.categories.store')
-    ->middleware(['check.initial.registration', 'check.income','redirect.if.initial.registration.complete']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration', 'check.income']);
 
 Route::get('/register/income',[RegisteredUserController::class,'showIncome'])
     ->name('register.income')
-    ->middleware(['check.initial.registration']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration']);
 
 Route::post('/register/income',[RegisteredUserController::class,'storeIncome'])
     ->name('register.income.store')
-    ->middleware([ 'check.initial.registration']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration']);
 
 Route::get('/register/budget',[RegisteredUserController::class,'showBudget'])
     ->name('register.budget')
-    ->middleware(['check.initial.registration', 'check.income','redirect.if.initial.registration.complete']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration', 'check.income']);
 Route::post('/register/budget',[RegisteredUserController::class,'storeBudget'])
     ->name('register.budget.store')
-    ->middleware(['check.initial.registration', 'check.income','redirect.if.initial.registration.complete']);
+    ->middleware(['redirect.if.initial.registration.complete', 'check.initial.registration', 'check.income']);
 
 Route::middleware(['auth','check.initial.registration'])->group(function () {
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index')->middleware('permission:expenses.index');
