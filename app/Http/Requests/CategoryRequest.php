@@ -39,7 +39,7 @@ class CategoryRequest extends FormRequest
                     'required_without:predefined_category',
                     'string',
                     'max:255',
-                    Rule::unique('categories')->whereNull('deleted_at')
+
                 ],
                 'budget_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
             ];
@@ -53,7 +53,7 @@ class CategoryRequest extends FormRequest
         }
 
         return [
-            'name' => 'required|string|max:255|unique:categories,name,' . $this->route('category')?->id,
+            'name' => 'required|string|max:255|',
             'budget_percentage' => 'required|numeric|min:0|max:100',
             'description' => 'nullable|string|max:1000',
         ];

@@ -114,15 +114,9 @@ class AdminController extends Controller
     }
     public function storeCategory(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255|unique:categories',
-        ]);
-
-        // Check if category already exists (including soft-deleted ones)
         $existingCategory = Category::withTrashed()
             ->where('name', $request->name)
             ->first();
-
         if ($existingCategory) {
             if ($existingCategory->trashed()) {
                 $existingCategory->restore();
@@ -133,6 +127,11 @@ class AdminController extends Controller
                     ->with('success', 'Category restored successfully.');
             }
         }
+        $request->validate([
+            'name' => 'required|string|max:255|unique:categories',
+        ]);
+
+
 
         $category = Category::create([
             'name' => $request->name,
@@ -150,10 +149,6 @@ class AdminController extends Controller
 
     public function updateCategory(Request $request, Category $category)
     {
-        $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
-        ]);
-
         $existingCategory = Category::where('name', $request->name)
             ->where('id', '!=', $category->id)
             ->first();
@@ -163,6 +158,11 @@ class AdminController extends Controller
             return redirect()->route('admin.categories')
                 ->with('success', 'Category updated successfully.');
         }
+        $request->validate([
+            'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
+        ]);
+
+
 
         $category->update(['name' => $request->name]);
 

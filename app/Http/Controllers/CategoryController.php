@@ -87,6 +87,21 @@ class CategoryController extends Controller
                 return redirect()->route('categories.index')
                     ->with('success', 'Category restored successfully.');
             }
+            else {
+                if (!$existingCategory->users->contains(Auth::id())) {
+                    Auth::user()->categories()->attach($existingCategory->id, [
+                        'budget_percentage' => $request->budget_percentage
+                    ]);
+                    return redirect()->route('categories.index')
+                        ->with('success', 'Category attached to your account successfully.');
+                } else {
+                    Auth::user()->categories()->updateExistingPivot($existingCategory->id, [
+                        'budget_percentage' => $request->budget_percentage
+                    ]);
+                    return redirect()->route('categories.index')
+                        ->with('success', 'Category budget updated successfully.');
+                }
+            }
         }
 
         $category = Category::create([
