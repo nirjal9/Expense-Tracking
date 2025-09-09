@@ -31,6 +31,7 @@ class ExpenseRequest extends FormRequest
                 'category_id' => ['nullable', 'exists:categories,id'],
                 'min_amount' => ['nullable', 'numeric', 'min:1'],
                 'max_amount' => ['nullable', 'numeric', 'min:1', 'gte:min_amount'],
+                'page' => ['nullable', 'integer', 'min:1'], // Allow pagination
             ];
         }
 

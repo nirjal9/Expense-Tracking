@@ -185,7 +185,7 @@
         </div>
 
         <div class="mt-4">
-            {{ $expenses->links() }}
+            {{ $expenses->appends(request()->except('page'))->links() }}
         </div>
 
     </div>

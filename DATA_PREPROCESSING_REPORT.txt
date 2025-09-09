@@ -1,0 +1,534 @@
+================================================================================
+                    DATA PREPROCESSING IN EXPENSE TRACKING SYSTEM
+================================================================================
+
+TABLE OF CONTENTS:
+1. Data Sources and Input
+2. Data Preprocessing Pipeline Structure
+3. Data Validation and Cleaning
+4. Text Data Preprocessing
+5. Outlier Detection and Removal
+6. Feature Engineering for ML
+7. Data Normalization
+8. Data Aggregation and Grouping
+9. Duplicate Detection
+10. Missing Value Handling
+11. Data Flow Diagram
+12. Key Preprocessing Techniques
+13. Implementation Details
+
+================================================================================
+1. DATA SOURCES AND INPUT
+================================================================================
+
+The system processes data from multiple sources:
+
+A. CSV Import Dataset:
+   - File: storage/app/six_month_expense_dataset.csv
+   - Content: 1000+ expense records
+   - Columns: id, user_id, category_id, description, amount, date, created_at, deleted_at
+   - Import Command: php artisan app:import-expenses six_month_expense_dataset.csv
+   - Sample Data:
+     id,user_id,category_id,description,amount,date,created_at,deleted_at
+     1,101,4,Rent,2519.71,2025-04-24,2025-04-24,
+     2,101,4,Rent,4990.3,2025-06-29,2025-06-29,
+     3,101,6,Shopping,1620.59,2025-01-25,2025-01-25,
+
+B. Real-time Input:
+   - Manual expense entry through web interface
+   - Form validation and sanitization
+
+C. Payment Notifications:
+   - Email parsing from payment gateways (eSewa, Khalti, Banks)
+   - SMS parsing from banks and payment services
+   - Webhook processing for real-time data
+
+D. Database Storage:
+   - SQLite for development
+   - MySQL for production
+   - Structured data with relationships
+
+================================================================================
+2. DATA PREPROCESSING PIPELINE STRUCTURE
+================================================================================
+
+The preprocessing pipeline follows this sequence:
+
+Raw Data → Validation → Cleaning → Feature Engineering → Normalization → Storage
+
+A. Input Layer:
+   - CSV files, manual input, email/SMS notifications
+   
+B. Validation Layer:
+   - Data type checking, range validation, required field validation
+   
+C. Cleaning Layer:
+   - Outlier removal, duplicate detection, missing value handling
+   
+D. Feature Engineering Layer:
+   - Temporal features, lag features, rolling statistics
+   
+E. Normalization Layer:
+   - Scaling for ML algorithms, text normalization
+   
+F. Storage Layer:
+   - Database storage with proper indexing
+
+================================================================================
+3. DATA VALIDATION AND CLEANING
+================================================================================
+
+A. Input Validation (ExpenseRequest.php):
+   
+   Validation rules for expense data:
+   - category_id: required
+   - amount: required|numeric|min:1|max:999999999.99
+   - description: nullable|string
+   - date: required|date|before:tomorrow
+   
+   Search and filter validation:
+   - start_date: nullable|date_format:Y-m-d
+   - end_date: nullable|date_format:Y-m-d
+   - search: nullable|string|max:255
+   - min_amount: nullable|numeric|min:1
+   - max_amount: nullable|numeric|min:1|gte:min_amount
+
+B. Transaction Data Validation (ExpenseCreationService.php):
+   
+   private function validateTransactionData(array $data): bool
+   {
+       $requiredFields = ['amount', 'merchant'];
+       
+       foreach ($requiredFields as $field) {
+           if (!isset($data[$field]) || empty($data[$field])) {
+               return false;
+           }
+       }
+       
+       // Validate amount is numeric and positive
+       if (!is_numeric($data['amount']) || $data['amount'] <= 0) {
+           return false;
+       }
+       
+       return true;
+   }
+
+C. Data Type Casting (Expense.php):
+   
+   protected $casts = [
+       'date' => 'date',
+       'is_auto_created' => 'boolean',
+       'requires_approval' => 'boolean',
+       'auto_created_at' => 'datetime',
+       'approved_at' => 'datetime',
+       'rejected_at' => 'datetime',
+   ];
+
+================================================================================
+4. TEXT DATA PREPROCESSING
+================================================================================
+
+A. Payment Notification Parsing:
+   
+   Regex patterns for data extraction:
+   - amount: '/Rs\.?\s*([0-9,]+\.?[0-9]*)/i'
+   - merchant: '/to\s+([^.]+?)(?:\s+successful|\.|$)/i'
+   - transaction_id: '/transaction\s*(?:id|no)\.?\s*:?\s*([A-Z0-9]+)/i'
+   - date: '/(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/'
+   - time: '/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i'
+
+B. Amount Normalization:
+   
+   private function parseAmount(string $amount): float
+   {
+       return (float) str_replace(',', '', $amount);
+   }
+
+C. Date Standardization:
+   
+   private function parseDate(?string $date): ?string
+   {
+       if (!$date) return null;
+       
+       try {
+           return \Carbon\Carbon::createFromFormat('d/m/Y', $date)->format('Y-m-d') ?:
+                  \Carbon\Carbon::createFromFormat('Y-m-d', $date)->format('Y-m-d') ?:
+                  \Carbon\Carbon::parse($date)->format('Y-m-d');
+       } catch (\Exception $e) {
+           return null;
+       }
+   }
+
+D. Text Normalization for Categorization:
+   
+   // Text preprocessing for auto-categorization
+   $merchant = strtolower(trim($merchant));
+   $description = strtolower(trim($description));
+   $combinedText = $merchant . ' ' . $description;
+
+E. Fuzzy Matching for Similar Merchants:
+   
+   private function calculateSimilarity(string $str1, string $str2): float
+   {
+       $maxLength = max(strlen($str1), strlen($str2));
+       
+       if ($maxLength === 0) {
+           return 1.0;
+       }
+
+       $distance = levenshtein($str1, $str2);
+       return 1 - ($distance / $maxLength);
+   }
+
+================================================================================
+5. OUTLIER DETECTION AND REMOVAL
+================================================================================
+
+A. IQR-based Outlier Detection (ForecastController.php):
+   
+   // Remove outliers from individual expenses using IQR
+   $expensesArray = $individualExpenses->filter(function($v) { 
+       return $v > 0; 
+   })->values()->toArray();
+
+   if (count($expensesArray) >= 2) {
+       sort($expensesArray);
+       $q1 = $expensesArray[(int) (0.25 * count($expensesArray))];
+       $q3 = $expensesArray[(int) (0.75 * count($expensesArray))];
+       $iqr = $q3 - $q1;
+       $lower = $q1 - 1.5 * $iqr;
+       $upper = $q3 + 1.5 * $iqr;
+       
+       $filteredExpenses = array_filter($expensesArray, function($v) use ($lower, $upper) {
+           return $v >= $lower && $v <= $upper;
+       });
+       $cleanedExpenses = array_values($filteredExpenses);
+   }
+
+B. Outlier Filtering in Historical Data:
+   
+   $historicalExpenses = $category->expenses
+       ->where('user_id', $user->id)
+       ->where('date', '<', $date->copy()->startOfMonth()->toDateString())
+       ->filter(function($expense) use ($cleanedExpenses) {
+           // Only keep expenses whose amount is in cleanedExpenses
+           return in_array($expense->amount, $cleanedExpenses);
+       })
+
+================================================================================
+6. FEATURE ENGINEERING FOR ML
+================================================================================
+
+A. Temporal Features (forecast.py):
+   
+   # Basic temporal features
+   df['month'] = df['date'].dt.month
+   df['year'] = df['date'].dt.year
+   df['day_of_week'] = df['date'].dt.dayofweek
+
+B. Time-based Lag Features (prevents data leakage):
+   
+   df['previous_month'] = df['amount'].shift(1)
+   df['previous_2months'] = df['amount'].shift(2)
+   df['previous_3months'] = df['amount'].shift(3)
+
+C. Rolling Statistics using past values only:
+   
+   past_amount = df['amount'].shift(1)
+   df['rolling_3m'] = past_amount.rolling(3, min_periods=3).mean()
+   df['rolling_6m'] = past_amount.rolling(6, min_periods=6).mean()
+   df['rolling_12m'] = past_amount.rolling(12, min_periods=12).mean()
+
+D. Volatility Features:
+   
+   df['rolling_std_3m'] = past_amount.rolling(3, min_periods=3).std()
+   df['rolling_std_6m'] = past_amount.rolling(6, min_periods=6).std()
+
+E. Trend Analysis:
+   
+   def slope_last_n(values):
+       n = len(values)
+       if n < 2:
+           return 0.0
+       x = np.arange(n)
+       m, _ = np.polyfit(x, values, 1)
+       return m
+   df['trend_3m'] = past_amount.rolling(3, min_periods=3).apply(slope_last_n, raw=True)
+
+F. Seasonal Features:
+   
+   df['is_holiday_season'] = df['month'].isin([11, 12, 1])  # Nov, Dec, Jan
+   df['is_summer'] = df['month'].isin([6, 7, 8])           # Jun, Jul, Aug
+
+G. Budget Features:
+   
+   df['budget_percentage'] = df['budget_percentage'].fillna(0)
+   df['budget_amount'] = (df['budget_percentage'] / 100) * df['income'].fillna(0)
+
+H. Feature Selection:
+   
+   feature_columns = [
+       'month', 'day_of_week', 'previous_month', 'previous_2months', 'previous_3months',
+       'rolling_3m', 'rolling_6m', 'rolling_12m', 'rolling_std_3m', 'rolling_std_6m',
+       'trend_3m', 'is_holiday_season', 'is_summer', 'budget_percentage'
+   ]
+
+================================================================================
+7. DATA NORMALIZATION
+================================================================================
+
+A. StandardScaler for ML Features:
+   
+   # Initialize scaler
+   self.scaler = StandardScaler()
+   
+   # Fit and transform training data
+   features_scaled = self.scaler.fit_transform(features)
+   
+   # Transform test data
+   last_features_scaled = self.scaler.transform(last_features)
+
+B. Local Scaler for Performance Metrics:
+   
+   local_scaler = StandardScaler()
+   X_train_scaled = local_scaler.fit_transform(X_train)
+   X_test_scaled = local_scaler.transform(X_test)
+
+================================================================================
+8. DATA AGGREGATION AND GROUPING
+================================================================================
+
+A. Monthly Aggregation:
+   
+   // Group expenses by month and sum
+   $historicalExpenses = $category->expenses
+       ->where('user_id', $user->id)
+       ->where('date', '<', $date->copy()->startOfMonth()->toDateString())
+       ->groupBy(function ($expense) {
+           return Carbon::parse($expense->date)->format('Y-m');
+       })
+       ->map(function ($monthExpenses) {
+           return $monthExpenses->sum('amount');
+       })
+       ->sortBy(function ($amount, $month) {
+           return $month;
+       })
+       ->values();
+
+B. Data Filtering:
+   
+   $monthlyTotals = $historicalExpenses->filter(function($total) {
+       return $total > 0;
+   })->values();
+
+================================================================================
+9. DUPLICATE DETECTION
+================================================================================
+
+A. Transaction Duplicate Check:
+   
+   private function isDuplicateTransaction(array $transactionData, User $user): bool
+   {
+       $query = Expense::where('user_id', $user->id)
+           ->where('amount', $transactionData['amount'])
+           ->where('date', $transactionData['date'] ?? now()->format('Y-m-d'));
+
+       // Check by transaction ID if available
+       if (isset($transactionData['transaction_id'])) {
+           $query->where('description', 'like', '%' . $transactionData['transaction_id'] . '%');
+       } else {
+           // Check by merchant and amount
+           $query->where('description', 'like', '%' . $transactionData['merchant'] . '%');
+       }
+
+       return $query->exists();
+   }
+
+B. Duplicate Prevention in Batch Processing:
+   
+   // Check for duplicates before creating expenses
+   if ($this->isDuplicateTransaction($transactionData, $user)) {
+       Log::info("Duplicate transaction detected for user {$user->id}: " . json_encode($transactionData));
+       DB::rollBack();
+       return null;
+   }
+
+================================================================================
+10. MISSING VALUE HANDLING
+================================================================================
+
+A. Default Value Assignment:
+   
+   # Provide defaults for optional engineered fields
+   df['budget_percentage'] = 0.0
+   df['income'] = 0.0
+   
+   # Remove rows with NaN values (created by shifts/rollings)
+   df = df.dropna()
+
+B. Null Value Handling in PHP:
+   
+   // Handle missing date with current date
+   'date' => $transactionData['date'] ?? now()->format('Y-m-d')
+   
+   // Handle missing description
+   'description' => $transactionData['description'] ?? ''
+
+C. Data Completeness Check:
+   
+   // Ensure minimum data points for meaningful analysis
+   if len(df) < 6:  # Need at least 6 data points for meaningful features
+       return None, None
+
+================================================================================
+11. DATA FLOW DIAGRAM
+================================================================================
+
+Raw Data Sources:
+├── CSV File (six_month_expense_dataset.csv)
+│   └── Import Command → Database
+├── Manual Input (Web Interface)
+│   └── Validation → Database
+├── Email Notifications
+│   └── Parser → Validation → Auto-Categorization → Database
+└── SMS Notifications
+    └── Parser → Validation → Auto-Categorization → Database
+
+Processing Pipeline:
+Database → Feature Engineering → ML Models
+Database → Outlier Removal → Statistical Forecasting
+Database → Aggregation → Reporting
+
+Data Flow:
+1. Data Ingestion (CSV, Manual, Email/SMS)
+2. Validation (Type checking, Range validation)
+3. Cleaning (Outlier removal, Duplicate detection)
+4. Feature Engineering (Temporal, Lag, Rolling features)
+5. Normalization (StandardScaler for ML)
+6. Storage (Database with proper indexing)
+7. Analysis (ML Forecasting, Statistical Analysis)
+
+================================================================================
+12. KEY PREPROCESSING TECHNIQUES
+================================================================================
+
+A. Data Validation:
+   - Input sanitization and type checking
+   - Range validation for amounts and dates
+   - Required field validation
+   - Format validation for dates and amounts
+
+B. Text Processing:
+   - Regex-based data extraction from emails/SMS
+   - Text normalization (lowercase, trimming)
+   - Fuzzy matching using Levenshtein distance
+   - Keyword-based categorization
+
+C. Outlier Detection:
+   - IQR-based outlier removal (1.5 * IQR rule)
+   - Statistical outlier detection
+   - Domain-specific outlier handling
+
+D. Feature Engineering:
+   - Temporal features (month, year, day of week)
+   - Lag features (previous month expenses)
+   - Rolling statistics (3m, 6m, 12m averages)
+   - Volatility features (rolling standard deviation)
+   - Trend analysis (linear regression slope)
+   - Seasonal features (holiday season, summer)
+
+E. Data Normalization:
+   - StandardScaler for ML features
+   - MinMaxScaler for specific use cases
+   - Local scaling for performance metrics
+
+F. Duplicate Detection:
+   - Multi-criteria duplicate checking
+   - Transaction ID matching
+   - Merchant and amount matching
+   - Date-based duplicate detection
+
+G. Missing Value Handling:
+   - Default value assignment
+   - Null value handling with fallbacks
+   - Data completeness validation
+
+H. Data Aggregation:
+   - Monthly grouping and summation
+   - Category-wise aggregation
+   - Time-series data preparation
+
+I. Data Leakage Prevention:
+   - Using only past values for features
+   - Proper train-test splitting
+   - Time-aware data processing
+
+J. Date Standardization:
+   - Multiple format support (d/m/Y, Y-m-d)
+   - Automatic format detection
+   - Fallback parsing mechanisms
+
+================================================================================
+13. IMPLEMENTATION DETAILS
+================================================================================
+
+A. File Locations:
+   - CSV Dataset: storage/app/six_month_expense_dataset.csv
+   - ML Script: ml_scripts/forecast.py
+   - Validation: app/Http/Requests/ExpenseRequest.php
+   - Payment Parsing: app/Services/PaymentNotification/
+   - Forecasting: app/Http/Controllers/ForecastController.php
+   - Models: app/Models/Expense.php
+
+B. Commands:
+   - Import CSV: php artisan app:import-expenses six_month_expense_dataset.csv
+   - ML Forecast: python3 ml_scripts/forecast.py --user-id=1 --category-id=1
+   - Test Parsing: POST /payment-notifications/test-parsing
+
+C. Dependencies:
+   - Python: scikit-learn, pandas, numpy
+   - PHP: Laravel, Carbon, League CSV
+   - Database: SQLite/MySQL
+
+D. Performance Considerations:
+   - Caching for merchant mappings (1 hour)
+   - Batch processing for large datasets
+   - Database indexing for fast lookups
+   - Memory-efficient data processing
+
+E. Error Handling:
+   - Comprehensive exception handling
+   - Graceful fallbacks for parsing failures
+   - Detailed error logging
+   - User-friendly error messages
+
+F. Data Quality Metrics:
+   - Parsing success rate
+   - Categorization accuracy
+   - Duplicate detection rate
+   - Outlier detection statistics
+
+================================================================================
+14. CONCLUSION
+================================================================================
+
+The expense tracking system implements a comprehensive data preprocessing pipeline that handles multiple data sources and formats. The preprocessing includes:
+
+1. Multi-source data ingestion (CSV, manual input, email/SMS)
+2. Robust validation and cleaning mechanisms
+3. Advanced feature engineering for ML models
+4. Statistical preprocessing for forecasting
+5. Text processing for payment notifications
+6. Outlier detection and removal
+7. Data normalization and standardization
+8. Duplicate detection and prevention
+9. Missing value handling
+10. Data aggregation and grouping
+
+This preprocessing pipeline ensures data quality, consistency, and prepares data for both machine learning and statistical analysis components of the system. The system can handle real-time data processing while maintaining data integrity and providing accurate forecasting capabilities.
+
+The CSV dataset (six_month_expense_dataset.csv) serves as the primary training data for ML models and contains 1000+ expense records with proper structure and formatting. The preprocessing pipeline transforms this raw data into features suitable for machine learning algorithms while maintaining the statistical properties needed for forecasting.
+
+================================================================================
+END OF REPORT
+================================================================================

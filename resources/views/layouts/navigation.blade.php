@@ -51,6 +51,11 @@
                         </x-nav-link>
                     </div>
                     <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                        <x-nav-link :href="route('ml-accuracy.dashboard')" :active="request()->routeIs('ml-accuracy.*')">
+                            {{ __('ML Accuracy') }}
+                        </x-nav-link>
+                    </div>
+                    <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                         <x-nav-link :href="route('categories.index')" :active="request()->routeIs('categories.index')">
                             {{ __('Categories') }}
                         </x-nav-link>
@@ -58,6 +63,11 @@
                     <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                         <x-nav-link :href="route('incomes.index')" :active="request()->routeIs('incomes.index')">
                             {{ __('Incomes') }}
+                        </x-nav-link>
+                    </div>
+                    <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                        <x-nav-link :href="route('payment-notifications.dashboard')" :active="request()->routeIs('payment-notifications.*')">
+                            {{ __('Payment Notifications') }}
                         </x-nav-link>
                     </div>
                 @endif
@@ -142,6 +152,9 @@
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('incomes.index')" :active="request()->routeIs('incomes.index')">
                     {{ __('Incomes') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('payment-notifications.dashboard')" :active="request()->routeIs('payment-notifications.*')">
+                    {{ __('Payment Notifications') }}
                 </x-responsive-nav-link>
             @endif
         </div>

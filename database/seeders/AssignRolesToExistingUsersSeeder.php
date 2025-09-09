@@ -21,5 +21,12 @@ class AssignRolesToExistingUsersSeeder extends Seeder
             $user->roles()->attach($defaultRole->id);
         });
 
+        // Ensure users 101-105 have the 'user' role
+        foreach (range(101, 105) as $id) {
+            $user = User::find($id);
+            if ($user) {
+                $user->roles()->syncWithoutDetaching([$defaultRole->id]);
+            }
+        }
     }
 }

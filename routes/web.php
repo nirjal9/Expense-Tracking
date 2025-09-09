@@ -81,6 +81,268 @@ Route::middleware(['auth','check.initial.registration'])->group(function () {
 });
 Route::get('/forecast', [ForecastController::class, 'createForecast'])->name('forecast')->middleware('permission:forecast','check.initial.registration');
 
+// ML Accuracy Routes
+Route::middleware(['auth', 'check.initial.registration'])->group(function () {
+    Route::get('/ml-accuracy', [App\Http\Controllers\MLAccuracyController::class, 'dashboard'])->name('ml-accuracy.dashboard');
+    Route::get('/ml-accuracy/compare', [App\Http\Controllers\MLAccuracyController::class, 'compareMethods'])->name('ml-accuracy.compare');
+});
+
+// Payment Notification Routes
+Route::middleware(['auth', 'check.initial.registration'])->group(function () {
+    Route::get('/payment-notifications', [App\Http\Controllers\PaymentNotificationController::class, 'dashboard'])->name('payment-notifications.dashboard');
+    Route::get('/payment-notifications/gmail/auth-url', [App\Http\Controllers\PaymentNotificationController::class, 'getGmailAuthUrl'])->name('payment-notifications.gmail.auth-url');
+    Route::post('/payment-notifications/gmail/authenticate', [App\Http\Controllers\PaymentNotificationController::class, 'authenticateGmail'])->name('payment-notifications.gmail.authenticate');
+    Route::post('/payment-notifications/process-emails', [App\Http\Controllers\PaymentNotificationController::class, 'processEmails'])->name('payment-notifications.process-emails');
+    Route::post('/payment-notifications/process-sms', [App\Http\Controllers\PaymentNotificationController::class, 'processSMS'])->name('payment-notifications.process-sms');
+    Route::get('/payment-notifications/auto-created-expenses', [App\Http\Controllers\PaymentNotificationController::class, 'getAutoCreatedExpenses'])->name('payment-notifications.auto-created-expenses');
+    Route::post('/payment-notifications/expenses/{expense}/approve', [App\Http\Controllers\PaymentNotificationController::class, 'approveExpense'])->name('payment-notifications.expenses.approve');
+    Route::post('/payment-notifications/expenses/{expense}/reject', [App\Http\Controllers\PaymentNotificationController::class, 'rejectExpense'])->name('payment-notifications.expenses.reject');
+    Route::post('/payment-notifications/test-parsing', [App\Http\Controllers\PaymentNotificationController::class, 'testParsing'])->name('payment-notifications.test-parsing');
+    Route::get('/payment-notifications/statistics', [App\Http\Controllers\PaymentNotificationController::class, 'getStatistics'])->name('payment-notifications.statistics');
+    
+    // Test route to create expense from actual SMS content
+    Route::post('/test-create-from-sms', function(Request $request) {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['error' => 'Not authenticated'], 401);
+            }
+
+            $content = $request->input('content');
+            if (!$content) {
+                return response()->json(['error' => 'Content is required'], 400);
+            }
+
+            $paymentService = app(App\Services\PaymentNotification\PaymentNotificationService::class);
+            
+            // Parse the SMS content
+            $smsParser = new App\Services\PaymentNotification\SMSParserService();
+            $transactionData = $smsParser->parse($content, 'test');
+            
+            if (!$transactionData) {
+                return response()->json(['error' => 'Could not parse SMS content'], 400);
+            }
+
+            // Create expense from parsed data
+            $expense = $paymentService->createExpenseFromTransaction($transactionData, $user);
+            
+            if ($expense) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Expense created from SMS successfully',
+                    'expense_id' => $expense->id,
+                    'amount' => $expense->amount,
+                    'merchant' => $expense->merchant,
+                    'category' => $expense->category ? $expense->category->name : 'None',
+                    'parsed_data' => $transactionData
+                ]);
+            } else {
+                return response()->json(['error' => 'Failed to create expense'], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
+
+// Webhook Routes (no auth required for external services)
+Route::post('/webhooks/payment-notifications', [App\Http\Controllers\PaymentNotificationController::class, 'webhook'])->name('webhooks.payment-notifications');
+
+// Test Routes (remove in production)
+Route::post('/test-sms-parsing', function(Request $request) {
+    try {
+        $content = $request->input('content');
+        if (!$content) {
+            return response()->json(['error' => 'Content is required'], 400);
+        }
+
+        $smsParser = new App\Services\PaymentNotification\SMSParserService();
+        $transactionData = $smsParser->parse($content, 'test');
+        
+        if ($transactionData) {
+            return response()->json([
+                'success' => true,
+                'message' => 'SMS parsed successfully',
+                'parsed_data' => $transactionData
+            ]);
+        } else {
+            return response()->json(['error' => 'Could not parse SMS content'], 400);
+        }
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+Route::post('/test-create-expense', function(Request $request) {
+    try {
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['error' => 'Not authenticated'], 401);
+        }
+
+        $paymentService = app(App\Services\PaymentNotification\PaymentNotificationService::class);
+        
+        // Sample transaction data
+        $transactionData = [
+            'amount' => $request->amount ?? 500.00,
+            'merchant' => $request->merchant ?? 'Test Store',
+            'transaction_id' => $request->transaction_id ?? 'TEST' . time(),
+            'date' => now(),
+            'source' => 'test',
+            'notification_type' => 'test',
+            'raw_data' => ['test' => true],
+            'description' => 'Test expense created via API'
+        ];
+
+        $expense = $paymentService->createExpenseFromTransaction($transactionData, $user);
+        
+        if ($expense) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Test expense created successfully',
+                'expense_id' => $expense->id,
+                'amount' => $expense->amount,
+                'merchant' => $expense->merchant
+            ]);
+        } else {
+            return response()->json(['error' => 'Failed to create expense'], 500);
+        }
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+        })->middleware('auth');
+
+Route::get('/test-payment-parsing', function() {
+    try {
+        $emailParser = new App\Services\PaymentNotification\EmailParserService();
+        $smsParser = new App\Services\PaymentNotification\SMSParserService();
+        
+        // Test email parsing
+        $esewaEmail = 'Dear User, Payment of Rs. 500.00 to ABC Store successful. Transaction ID: ES123456789. Date: 15-Jan-2024. Thank you for using eSewa.';
+        $emailResult = $emailParser->parse($esewaEmail, 'email');
+        
+        // Test SMS parsing
+        $bankSMS = 'Rs. 1,500.00 debited from A/C **1234 on 15-Jan-24 at Petrol Pump ABC. Avl Bal: Rs. 25,000.00';
+        $smsResult = $smsParser->parse($bankSMS, 'sms');
+        
+        return response()->json([
+            'status' => 'success',
+            'email_parsing' => $emailResult,
+            'sms_parsing' => $smsResult,
+            'message' => 'Payment notification parsing is working correctly!'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Error: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test ML Service (remove in production)
+Route::get('/test-ml', function() {
+    try {
+        $mlService = new App\Services\MLForecastService();
+        
+        // MySQL connection info
+        $db = config('database.connections.mysql');
+        $dbPingOk = false;
+        try {
+            \Illuminate\Support\Facades\DB::connection('mysql')->select('SELECT 1');
+            $dbPingOk = true;
+        } catch (\Throwable $t) {
+            $dbPingOk = false;
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'ML Service initialized successfully',
+            'test_data' => [
+                'service_initialized' => true,
+                'python_path' => $mlService->pythonPath ?? 'Not accessible',
+                'script_path' => $mlService->scriptPath ?? 'Not accessible',
+                'script_exists' => file_exists($mlService->scriptPath ?? ''),
+                'db_connection' => config('database.default'),
+                'mysql' => [
+                    'host' => $db['host'] ?? null,
+                    'port' => $db['port'] ?? null,
+                    'database' => $db['database'] ?? null,
+                    'username' => $db['username'] ?? null,
+                    'ping_ok' => $dbPingOk,
+                ],
+            ],
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+});
+
+// Test ML Service with user data (remove in production)
+Route::get('/test-ml-user', function() {
+    try {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['status' => 'error', 'message' => 'User not authenticated']);
+        }
+        
+        $mlService = new App\Services\MLForecastService();
+        $categories = $user->categories()->withTrashed()->get();
+        
+        $testData = [
+            'user_id' => $user->id,
+            'categories_count' => $categories->count(),
+            'categories' => $categories->map(function($cat) {
+                return [
+                    'id' => $cat->id,
+                    'name' => $cat->name,
+                    // Count expenses for the CURRENT user, not the category owner
+                    'expenses_count' => $cat->expenses()->where('user_id', Auth::id())->count()
+                ];
+            })->toArray()
+        ];
+        
+        return response()->json([
+            'status' => 'success', 
+            'message' => 'User data retrieved successfully',
+            'test_data' => $testData
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+});
+
+// Test database configuration (remove in production)
+Route::get('/test-db', function() {
+    try {
+        $dbConfig = [
+            'default_connection' => config('database.default'),
+            'sqlite_database' => config('database.connections.sqlite.database'),
+            'database_path' => database_path('database.sqlite'),
+            'storage_path' => storage_path('database.sqlite'),
+            'base_path' => base_path('database.sqlite'),
+            'env_db_database' => env('DB_DATABASE'),
+            'env_db_connection' => env('DB_CONNECTION'),
+        ];
+        
+        // Check which files actually exist
+        $dbFiles = [
+            'database/database.sqlite' => file_exists(database_path('database.sqlite')),
+            'storage/database.sqlite' => file_exists(storage_path('database.sqlite')),
+            'base/database.sqlite' => file_exists(base_path('database.sqlite')),
+        ];
+        
+        return response()->json([
+            'status' => 'success',
+            'database_config' => $dbConfig,
+            'database_files' => $dbFiles,
+            'current_working_directory' => getcwd(),
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+});
+
 //Route::middleware('auth')->group(function () {
 //    Route::resource('categories', CategoryController::class);
 //});
