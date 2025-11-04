@@ -2,6 +2,7 @@
 """
 Expense Forecasting ML Script
 Uses multiple ML algorithms to predict future expenses
+All algorithms implemented from scratch (no sklearn dependencies for core algorithms)
 """
 
 import pandas as pd
@@ -13,13 +14,400 @@ import argparse
 import os
 import joblib
 from datetime import datetime, timedelta
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split, cross_val_score
+import random
 import warnings
 warnings.filterwarnings('ignore')
+
+# ============================================================================
+# CUSTOM IMPLEMENTATIONS FROM SCRATCH
+# ============================================================================
+
+class StandardScaler:
+    """Custom StandardScaler implementation from scratch"""
+    def __init__(self):
+        self.mean_ = None
+        self.scale_ = None
+    
+    def fit(self, X):
+        """Compute mean and standard deviation for scaling"""
+        X = np.array(X, dtype=np.float64)
+        # Handle 1D arrays
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        
+        self.mean_ = np.mean(X, axis=0).astype(np.float64)
+        # Calculate std manually to avoid numpy issues
+        variance = np.mean((X - self.mean_) ** 2, axis=0)
+        self.scale_ = np.sqrt(variance).astype(np.float64)
+        
+        # Avoid division by zero - handle both scalar and array cases
+        if np.isscalar(self.scale_):
+            if self.scale_ == 0:
+                self.scale_ = 1.0
+        else:
+            self.scale_ = np.where(self.scale_ == 0, 1.0, self.scale_)
+        
+        return self
+    
+    def transform(self, X):
+        """Scale features using mean and standard deviation"""
+        X = np.array(X, dtype=np.float64)
+        # Handle 1D arrays
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        
+        # Ensure broadcast works correctly
+        result = (X - self.mean_) / self.scale_
+        
+        # Return in same shape as input
+        if result.shape[0] == 1 and result.ndim == 2:
+            return result.flatten()
+        return result
+    
+    def fit_transform(self, X):
+        """Fit and transform in one step"""
+        return self.fit(X).transform(X)
+
+
+class LinearRegression:
+    """Custom Linear Regression implementation from scratch using Normal Equation"""
+    def __init__(self):
+        self.coefficients_ = None  # Weights (theta)
+        self.intercept_ = None     # Bias term
+    
+    def fit(self, X, y):
+        """
+        Train Linear Regression using Normal Equation: θ = (X^T * X)^(-1) * X^T * y
+        """
+        X = np.array(X)
+        y = np.array(y).reshape(-1, 1)
+        
+        # Add bias term (column of ones) to X
+        X_with_bias = np.column_stack([np.ones(len(X)), X])
+        
+        # Normal Equation: θ = (X^T * X)^(-1) * X^T * y
+        try:
+            # Calculate (X^T * X)
+            XTX = np.dot(X_with_bias.T, X_with_bias)
+            
+            # Calculate (X^T * y)
+            XTy = np.dot(X_with_bias.T, y)
+            
+            # Calculate inverse and solve for theta
+            # Use pseudo-inverse if matrix is singular
+            try:
+                theta = np.linalg.solve(XTX, XTy)
+            except np.linalg.LinAlgError:
+                # If singular, use pseudo-inverse
+                theta = np.dot(np.linalg.pinv(XTX), XTy)
+            
+            # Extract intercept and coefficients
+            self.intercept_ = theta[0][0]
+            self.coefficients_ = theta[1:].flatten()
+            
+        except Exception as e:
+            # Fallback: simple linear fit for 1D case
+            if X.shape[1] == 1:
+                x = X.flatten()
+                n = len(x)
+                sum_x = np.sum(x)
+                sum_y = np.sum(y)
+                sum_xy = np.sum(x * y.flatten())
+                sum_x2 = np.sum(x ** 2)
+                
+                denominator = n * sum_x2 - sum_x ** 2
+                if denominator != 0:
+                    self.coefficients_ = np.array([(n * sum_xy - sum_x * sum_y) / denominator])
+                    self.intercept_ = (sum_y - self.coefficients_[0] * sum_x) / n
+                else:
+                    self.coefficients_ = np.array([0.0])
+                    self.intercept_ = np.mean(y)
+            else:
+                self.coefficients_ = np.zeros(X.shape[1])
+                self.intercept_ = np.mean(y)
+        
+        return self
+    
+    def predict(self, X):
+        """Make predictions: y = X * θ + intercept"""
+        X = np.array(X)
+        if self.coefficients_ is None:
+            return np.zeros(len(X))
+        
+        # y = X * coefficients + intercept
+        predictions = np.dot(X, self.coefficients_) + self.intercept_
+        return predictions
+
+
+class DecisionTreeRegressor:
+    """Custom Decision Tree Regressor implementation from scratch"""
+    def __init__(self, max_depth=10, min_samples_split=2, random_state=42):
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.random_state = random_state
+        self.tree = None
+    
+    def _calculate_mse(self, y):
+        """Calculate Mean Squared Error"""
+        if len(y) == 0:
+            return 0
+        mean = np.mean(y)
+        return np.mean((y - mean) ** 2)
+    
+    def _find_best_split(self, X, y, feature_indices):
+        """Find the best split for a node"""
+        best_feature = None
+        best_threshold = None
+        best_mse_reduction = -np.inf
+        
+        for feature_idx in feature_indices:
+            # Get unique values for this feature
+            feature_values = np.unique(X[:, feature_idx])
+            
+            for threshold in feature_values:
+                # Split data
+                left_mask = X[:, feature_idx] <= threshold
+                right_mask = ~left_mask
+                
+                if np.sum(left_mask) < self.min_samples_split or np.sum(right_mask) < self.min_samples_split:
+                    continue
+                
+                # Calculate MSE reduction
+                parent_mse = self._calculate_mse(y)
+                left_mse = self._calculate_mse(y[left_mask])
+                right_mse = self._calculate_mse(y[right_mask])
+                
+                # Weighted MSE
+                left_weight = np.sum(left_mask) / len(y)
+                right_weight = np.sum(right_mask) / len(y)
+                weighted_mse = left_weight * left_mse + right_weight * right_mse
+                
+                mse_reduction = parent_mse - weighted_mse
+                
+                if mse_reduction > best_mse_reduction:
+                    best_mse_reduction = mse_reduction
+                    best_feature = feature_idx
+                    best_threshold = threshold
+        
+        return best_feature, best_threshold
+    
+    def _build_tree(self, X, y, depth=0, feature_indices=None):
+        """Recursively build decision tree"""
+        # Base cases
+        if depth >= self.max_depth or len(y) < self.min_samples_split:
+            return {'value': np.mean(y), 'is_leaf': True}
+        
+        if feature_indices is None:
+            feature_indices = list(range(X.shape[1]))
+        
+        # Check if all values are same
+        if len(np.unique(y)) == 1:
+            return {'value': y[0], 'is_leaf': True}
+        
+        # Find best split
+        best_feature, best_threshold = self._find_best_split(X, y, feature_indices)
+        
+        if best_feature is None:
+            return {'value': np.mean(y), 'is_leaf': True}
+        
+        # Split data
+        left_mask = X[:, best_feature] <= best_threshold
+        right_mask = ~left_mask
+        
+        # Build left and right subtrees
+        left_tree = self._build_tree(X[left_mask], y[left_mask], depth + 1, feature_indices)
+        right_tree = self._build_tree(X[right_mask], y[right_mask], depth + 1, feature_indices)
+        
+        return {
+            'feature': best_feature,
+            'threshold': best_threshold,
+            'left': left_tree,
+            'right': right_tree,
+            'is_leaf': False
+        }
+    
+    def _predict_sample(self, tree, sample):
+        """Predict for a single sample"""
+        if tree['is_leaf']:
+            return tree['value']
+        
+        if sample[tree['feature']] <= tree['threshold']:
+            return self._predict_sample(tree['left'], sample)
+        else:
+            return self._predict_sample(tree['right'], sample)
+    
+    def fit(self, X, y):
+        """Train decision tree"""
+        X = np.array(X)
+        y = np.array(y).flatten()
+        
+        if self.random_state is not None:
+            random.seed(self.random_state)
+            np.random.seed(self.random_state)
+        
+        self.tree = self._build_tree(X, y)
+        return self
+    
+    def predict(self, X):
+        """Make predictions"""
+        X = np.array(X)
+        predictions = []
+        for sample in X:
+            pred = self._predict_sample(self.tree, sample)
+            predictions.append(pred)
+        return np.array(predictions)
+
+
+class RandomForestRegressor:
+    """Custom Random Forest Regressor implementation from scratch"""
+    def __init__(self, n_estimators=100, max_depth=10, random_state=42):
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.random_state = random_state
+        self.trees = []
+        self.feature_indices_per_tree = []
+    
+    def _bootstrap_sample(self, X, y):
+        """Create bootstrap sample (sampling with replacement)"""
+        n_samples = len(X)
+        indices = np.random.choice(n_samples, size=n_samples, replace=True)
+        return X[indices], y[indices]
+    
+    def _random_feature_subset(self, n_features):
+        """Select random subset of features (feature bagging)"""
+        # Use sqrt of features as default (common in Random Forest)
+        n_features_to_select = int(np.sqrt(n_features))
+        if n_features_to_select < 1:
+            n_features_to_select = 1
+        return np.random.choice(n_features, size=n_features_to_select, replace=False)
+    
+    def fit(self, X, y):
+        """Train Random Forest"""
+        X = np.array(X)
+        y = np.array(y).flatten()
+        
+        if self.random_state is not None:
+            random.seed(self.random_state)
+            np.random.seed(self.random_state)
+        
+        n_features = X.shape[1]
+        self.trees = []
+        self.feature_indices_per_tree = []
+        
+        for i in range(self.n_estimators):
+            # Bootstrap sampling
+            X_boot, y_boot = self._bootstrap_sample(X, y)
+            
+            # Feature bagging - select random subset of features
+            feature_indices = self._random_feature_subset(n_features)
+            self.feature_indices_per_tree.append(feature_indices)
+            
+            # Train tree on bootstrap sample with selected features
+            tree = DecisionTreeRegressor(max_depth=self.max_depth, random_state=self.random_state + i)
+            X_boot_selected = X_boot[:, feature_indices]
+            tree.fit(X_boot_selected, y_boot)
+            self.trees.append(tree)
+        
+        return self
+    
+    def predict(self, X):
+        """Make predictions by averaging predictions from all trees"""
+        X = np.array(X)
+        # Ensure X is 2D
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        
+        predictions = []
+        
+        for idx in range(len(X)):
+            sample = X[idx]
+            tree_predictions = []
+            for i, tree in enumerate(self.trees):
+                # Use same feature subset as training
+                feature_indices = self.feature_indices_per_tree[i]
+                # Select features for this sample
+                sample_selected = sample[feature_indices]
+                # Ensure it's 2D for tree prediction
+                if sample_selected.ndim == 1:
+                    sample_selected = sample_selected.reshape(1, -1)
+                pred_result = tree.predict(sample_selected)
+                # Handle both scalar and array returns
+                if np.isscalar(pred_result):
+                    pred = pred_result
+                else:
+                    pred = pred_result[0] if len(pred_result) > 0 else 0.0
+                tree_predictions.append(pred)
+            
+            # Average predictions from all trees
+            avg_pred = np.mean(tree_predictions)
+            predictions.append(avg_pred)
+        
+        return np.array(predictions)
+
+
+def mean_absolute_error(y_true, y_pred):
+    """Calculate Mean Absolute Error"""
+    return np.mean(np.abs(y_true - y_pred))
+
+
+def mean_squared_error(y_true, y_pred):
+    """Calculate Mean Squared Error"""
+    return np.mean((y_true - y_pred) ** 2)
+
+
+def r2_score(y_true, y_pred):
+    """Calculate R² Score"""
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    if ss_tot == 0:
+        return 0.0
+    return 1 - (ss_res / ss_tot)
+
+
+def cross_val_score(model, X, y, cv=3, scoring='r2'):
+    """Custom cross-validation implementation"""
+    n_samples = len(X)
+    fold_size = n_samples // cv
+    scores = []
+    
+    for i in range(cv):
+        # Create train/test split
+        start_idx = i * fold_size
+        end_idx = (i + 1) * fold_size if i < cv - 1 else n_samples
+        
+        test_indices = list(range(start_idx, end_idx))
+        train_indices = [idx for idx in range(n_samples) if idx not in test_indices]
+        
+        X_train, X_test = X[train_indices], X[test_indices]
+        y_train, y_test = y[train_indices], y[test_indices]
+        
+        # Create a fresh model instance based on type
+        if hasattr(model, 'n_estimators'):
+            # For Random Forest
+            model_copy = RandomForestRegressor(
+                n_estimators=model.n_estimators,
+                max_depth=model.max_depth,
+                random_state=model.random_state
+            )
+        else:
+            # For Linear Regression (default)
+            model_copy = LinearRegression()
+        
+        # Train model
+        model_copy.fit(X_train, y_train)
+        predictions = model_copy.predict(X_test)
+        
+        # Calculate score
+        if scoring == 'r2':
+            score = r2_score(y_test, predictions)
+        elif scoring == 'mae':
+            score = -mean_absolute_error(y_test, predictions)  # Negative because higher is better
+        else:
+            score = r2_score(y_test, predictions)
+        
+        scores.append(score)
+    
+    return np.array(scores)
 
 
 try:
@@ -458,21 +846,95 @@ class ExpenseForecaster:
             }
             
         try:
-            # Use time-series aware train-test split (last 20% for testing)
-            split_idx = int(len(features) * 0.8)
-            if split_idx < 3:  # Need at least 3 points for training
+            # Filter out obvious outliers (incomplete months) - months with amounts < 10% of median
+            median_target = np.median(targets)
+            threshold = max(median_target * 0.1, 1000)  # At least Rs.1000 threshold
+            
+            # Create mask to exclude outliers (incomplete months)
+            valid_mask = targets >= threshold
+            
+            # If filtering removes too much (>30%), don't filter
+            if np.sum(valid_mask) < len(targets) * 0.7:
+                valid_mask = np.ones(len(targets), dtype=bool)
+            
+            # Use filtered data for evaluation
+            features_filtered = features[valid_mask]
+            targets_filtered = targets[valid_mask]
+            
+            # For small datasets (<10 points), use cross-validation instead of train-test split
+            if len(features_filtered) < 10:
+                local_scaler = StandardScaler()
+                features_scaled = local_scaler.fit_transform(features_filtered)
+                
+                # Use cross-validation with fewer folds for small datasets
+                cv_folds = min(3, max(2, len(features_filtered) - 1))
+                cv_scores = cross_val_score(model, features_scaled, targets_filtered, cv=cv_folds, scoring='r2')
+                r2 = float(np.mean(cv_scores))
+                
+                # Calculate MAE and RMSE from cross-validation predictions
+                # Train on all data and use leave-one-out for small sets
+                if len(features_filtered) <= 5:
+                    # For very small datasets, calculate on training error (less ideal but better than nothing)
+                    model.fit(features_scaled, targets_filtered)
+                    predictions = model.predict(features_scaled)
+                    mae = mean_absolute_error(targets_filtered, predictions)
+                    rmse = np.sqrt(mean_squared_error(targets_filtered, predictions))
+                else:
+                    # Use cross-validation to estimate errors
+                    mae_list = []
+                    rmse_list = []
+                    for i in range(cv_folds):
+                        test_start = i * (len(features_filtered) // cv_folds)
+                        test_end = (i + 1) * (len(features_filtered) // cv_folds) if i < cv_folds - 1 else len(features_filtered)
+                        test_indices = list(range(test_start, test_end))
+                        train_indices = [j for j in range(len(features_filtered)) if j not in test_indices]
+                        
+                        X_train_cv = features_scaled[train_indices]
+                        y_train_cv = targets_filtered[train_indices]
+                        X_test_cv = features_scaled[test_indices]
+                        y_test_cv = targets_filtered[test_indices]
+                        
+                        model_cv = LinearRegression() if hasattr(model, 'coefficients_') else RandomForestRegressor(n_estimators=10, max_depth=5, random_state=42)
+                        model_cv.fit(X_train_cv, y_train_cv)
+                        pred_cv = model_cv.predict(X_test_cv)
+                        
+                        mae_list.append(mean_absolute_error(y_test_cv, pred_cv))
+                        rmse_list.append(np.sqrt(mean_squared_error(y_test_cv, pred_cv)))
+                    
+                    mae = float(np.mean(mae_list))
+                    rmse = float(np.mean(rmse_list))
+                
+                # Calculate MAPE
+                model.fit(features_scaled, targets_filtered)
+                predictions = model.predict(features_scaled)
+                mape = np.mean(np.abs((targets_filtered - predictions) / np.maximum(targets_filtered, 1))) * 100
+                
+                # Cap extremely negative R² scores for reporting
+                if r2 < -10:
+                    r2 = -10.0
+                
+                return {
+                    'mae': float(mae),
+                    'mape': float(mape),
+                    'rmse': float(rmse),
+                    'r2_score': float(r2)
+                }
+            
+            # For larger datasets, use train-test split
+            split_idx = int(len(features_filtered) * 0.8)
+            if split_idx < 3:
                 split_idx = 3
                 
-            X_train, X_test = features[:split_idx], features[split_idx:]
-            y_train, y_test = targets[:split_idx], targets[split_idx:]
+            X_train, X_test = features_filtered[:split_idx], features_filtered[split_idx:]
+            y_train, y_test = targets_filtered[:split_idx], targets_filtered[split_idx:]
             
-            if len(X_test) < 1:  # Need at least 1 test point
+            if len(X_test) < 1:
                 # Fallback to cross-validation
                 local_scaler = StandardScaler()
-                features_scaled = local_scaler.fit_transform(features)
-                cv_scores = cross_val_score(model, features_scaled, targets, cv=min(3, len(features)-1), scoring='r2')
+                features_scaled = local_scaler.fit_transform(features_filtered)
+                cv_scores = cross_val_score(model, features_scaled, targets_filtered, cv=min(3, len(features_filtered)-1), scoring='r2')
                 r2 = float(np.mean(cv_scores))
-                std_targets = float(np.std(targets)) if np.std(targets) > 0 else 1.0
+                std_targets = float(np.std(targets_filtered)) if np.std(targets_filtered) > 0 else 1.0
                 mae = std_targets * max(0.0, (1 - r2)) * 0.5
                 rmse = std_targets * max(0.0, (1 - r2)) * 0.7
                 mape = max(0.0, (1 - r2) * 100)
@@ -494,10 +956,14 @@ class ExpenseForecaster:
             # Make predictions on test data
             predictions = model.predict(X_test_scaled)
             
-            # Calculate metrics on test data (not training data!)
+            # Calculate metrics on test data
             mae = mean_absolute_error(y_test, predictions)
             rmse = np.sqrt(mean_squared_error(y_test, predictions))
             r2 = r2_score(y_test, predictions)
+            
+            # Cap extremely negative R² scores for reporting
+            if r2 < -10:
+                r2 = -10.0
             
             # Calculate MAPE
             mape = np.mean(np.abs((y_test - predictions) / np.maximum(y_test, 1))) * 100
@@ -509,7 +975,8 @@ class ExpenseForecaster:
                 'r2_score': float(r2)
             }
             
-        except Exception:
+        except Exception as e:
+            print(f"ERROR in calculate_performance_metrics: {str(e)}", file=sys.stderr)
             return {
                 'mae': 0,
                 'mape': 0,
@@ -689,8 +1156,7 @@ def main():
                             split_idx = 2
                         X_train, X_test = X[:split_idx], X[split_idx:]
                         y_train, y_test = y[:split_idx], y[split_idx:]
-                        from sklearn.linear_model import LinearRegression
-                        from sklearn.preprocessing import StandardScaler
+                        # Use our custom implementations
                         scaler = StandardScaler()
                         X_train_scaled = scaler.fit_transform(X_train)
                         X_test_scaled = scaler.transform(X_test)

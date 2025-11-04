@@ -7,6 +7,7 @@ use App\Services\MLForecastService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 
 class ForecastController extends Controller
@@ -101,10 +102,16 @@ class ForecastController extends Controller
             $estimatedExpense = null;
             $forecastMethod = 'Statistical';
 
-            if ($mlForecast && isset($mlForecast['prediction'])) {
+            // Only use ML forecast if it's valid (data_points <= 10 for monthly aggregation)
+            $mlDataPoints = $mlForecast['data_points'] ?? 999;
+            if ($mlForecast && isset($mlForecast['prediction']) && $mlDataPoints <= 10) {
                 $estimatedExpense = $mlForecast['prediction'];
                 $forecastMethod = 'Machine Learning (' . ($mlForecast['model_type'] ?? 'ML') . ')';
             } else {
+                // Reject ML forecast if data_points is too high (trained on individual transactions)
+                if ($mlForecast && $mlDataPoints > 10) {
+                    Log::warning("Rejecting ML forecast with invalid data_points ({$mlDataPoints}) for user {$user->id}, category {$category->name}. Using statistical fallback.");
+                }
                 //  Fall back to statistical forecasting
                 if (count($cleanedTotals) >= 6) {
                     $regressionEstimate = $this->predictNextExpenseUsingLinearRegression($cleanedTotals);

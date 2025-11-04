@@ -41,11 +41,19 @@ class MLForecastService
             if ($savedModelResult && isset($savedModelResult['prediction']) && $savedModelResult['prediction'] > 0) {
                 // Verify data_points to ensure we're using monthly aggregated model
                 $dataPoints = $savedModelResult['data_points'] ?? 0;
-                if ($dataPoints <= 10) { // Monthly aggregated should be <= 10
+                // CRITICAL: Reject models trained on individual transactions (data_points > 10)
+                // Monthly aggregated models should have <= 10 data points (one per month)
+                if ($dataPoints > 10) {
+                    Log::warning("Rejecting saved model trained on individual transactions: data_points={$dataPoints} (should be <=10 for monthly data). Forcing retrain for user {$user->id}, category {$category->name}");
+                    // Delete the invalid model file to force fresh training
+                    $modelPath = storage_path("app/ml_models/forecast_user_{$user->id}_cat_{$category->id}.pkl");
+                    if (file_exists($modelPath)) {
+                        unlink($modelPath);
+                        Log::info("Deleted invalid model file: {$modelPath}");
+                    }
+                } else {
                     Log::info("Using saved ML model for user {$user->id}, category {$category->name}, target: {$targetDate->format('Y-m')}, data_points: {$dataPoints}");
                     return $savedModelResult;
-                } else {
-                    Log::warning("Rejecting saved model with high data_points ({$dataPoints}), forcing retrain for user {$user->id}, category {$category->name}");
                 }
             }
             
@@ -139,11 +147,18 @@ class MLForecastService
                 $dataPoints = $result['data_points'] ?? 0;
                 $prediction = $result['prediction'] ?? 0;
                 
-                if ($dataPoints <= 10 && $prediction > 0) {
+                // CRITICAL: Reject models trained on individual transactions (data_points > 10)
+                // Monthly aggregated models should have <= 10 data points (one per month)
+                if ($dataPoints > 10) {
+                    Log::warning("Rejecting saved model trained on individual transactions: data_points={$dataPoints} (should be <=10 for monthly data). Forcing retrain.");
+                    return null;
+                }
+                
+                if ($prediction > 0) {
                     Log::info("Using saved model prediction: Rs.{$prediction}, data_points: {$dataPoints}");
                     return $result;
                 } else {
-                    Log::warning("Rejecting saved model result: data_points={$dataPoints}, prediction={$prediction}");
+                    Log::warning("Rejecting saved model result: prediction={$prediction}");
                     return null;
                 }
             }
@@ -201,6 +216,19 @@ class MLForecastService
         if (isset($result['error'])) {
             Log::error("ML script returned error: " . $result['error']);
             return null;
+        }
+        
+        // CRITICAL: Validate data_points for ALL results (Cached or Fresh)
+        $dataPoints = $result['data_points'] ?? 0;
+        if ($dataPoints > 10) {
+            Log::warning("Rejecting ML result trained on individual transactions: data_points={$dataPoints} (should be <=10 for monthly data). User: {$user->id}, Category: {$category->name}");
+            // Delete the invalid model file if it exists
+            $modelPath = storage_path("app/ml_models/forecast_user_{$user->id}_cat_{$category->id}.pkl");
+            if (file_exists($modelPath)) {
+                unlink($modelPath);
+                Log::info("Deleted invalid model file: {$modelPath}");
+            }
+            return null; // Force fallback to statistical method
         }
         
         return $result;
