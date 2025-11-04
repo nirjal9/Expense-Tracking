@@ -39,8 +39,17 @@ class ImportExpenses extends Command
         if (($handle = fopen($path, 'r')) !== false) {
             $header = fgetcsv($handle);
             $rowCount = 0;
+            $skippedCount = 0;
+            
             while (($row = fgetcsv($handle)) !== false) {
                 $data = array_combine($header, $row);
+                
+                // If user_id override is specified, only import rows that match that user_id in CSV
+                if ($overrideUserId !== null && isset($data['user_id']) && (int)$data['user_id'] != (int)$overrideUserId) {
+                    $skippedCount++;
+                    continue;
+                }
+                
                 try {
                     Expense::updateOrCreate(
                         [
@@ -63,6 +72,9 @@ class ImportExpenses extends Command
             }
             fclose($handle);
             $this->info("Imported $rowCount expenses from $filename");
+            if ($skippedCount > 0) {
+                $this->info("Skipped $skippedCount expenses (not for specified user)");
+            }
         } else {
             $this->error("Could not open file: $path");
             return 1;

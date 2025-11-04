@@ -48,10 +48,13 @@
             </table>
         </div>
 
-        <div class="mb-4 text-center">
+        <div class="mb-4 text-center space-x-4">
             <a href="{{ route('expenses.create') }}" class="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-700">
                 + Add Expense
             </a>
+            <button id="add-from-message-btn" class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700">
+                📱 Add from Message
+            </button>
         </div>
 
         <h2 class="text-xl font-bold mb-4 text-gray-900 dark:text-gray-200">Expense History</h2>
@@ -189,4 +192,257 @@
         </div>
 
     </div>
+
+<!-- Add from Message Modal -->
+<div id="add-from-message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">📱 Add Expense from Message</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Paste your transaction SMS or email below and we'll automatically create an expense for you!
+            </p>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Message Type</label>
+                <select id="message-source" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <option value="sms">SMS</option>
+                    <option value="email">Email</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Transaction Message</label>
+                <textarea id="message-content" rows="4" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Paste your eSewa, Khalti, or bank transaction message here...
+
+Example: Rs. 500.00 payment to Shell Petrol Station successful via eSewa. Transaction ID: ESW123456"></textarea>
+            </div>
+            <!-- Step 1: Parse Message -->
+            <div id="parse-step" class="flex justify-end space-x-3">
+                <button onclick="closeMessageModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Cancel</button>
+                <button onclick="parseMessage()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Parse Message</button>
+            </div>
+            
+            <!-- Step 2: Preview & Create -->
+            <div id="preview-step" class="hidden">
+                <div class="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg p-4 mb-4">
+                    <h4 class="font-medium text-green-800 dark:text-green-200 mb-3">✅ Message Parsed Successfully!</h4>
+                    <div id="parsed-data" class="space-y-3">
+                        <!-- Parsed data will be inserted here -->
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
+                    <select id="expense-category" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                        @foreach($allCategories ?? [] as $category)
+                            <option value="{{ $category->id }}">{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">💡 Correct the category if needed - this helps the system learn!</p>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button onclick="backToParseStep()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Back</button>
+                    <button onclick="createExpenseFromParsedData()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Create Expense</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listener for the "Add from Message" button
+    document.getElementById('add-from-message-btn').addEventListener('click', function() {
+        document.getElementById('add-from-message-modal').classList.remove('hidden');
+    });
+});
+
+let parsedExpenseData = null;
+
+function closeMessageModal() {
+    document.getElementById('add-from-message-modal').classList.add('hidden');
+    document.getElementById('message-content').value = '';
+    // Reset to step 1
+    document.getElementById('parse-step').classList.remove('hidden');
+    document.getElementById('preview-step').classList.add('hidden');
+    parsedExpenseData = null;
+}
+
+function parseMessage() {
+    const content = document.getElementById('message-content').value;
+    const source = document.getElementById('message-source').value;
+    
+    if (!content.trim()) {
+        alert('Please enter your transaction message first');
+        return;
+    }
+    
+    // Add loading state
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Parsing...';
+    
+    console.log('Parsing message:', content);
+    
+    // First, test parsing to get the data
+    fetch('/payment-notifications/test-parsing', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({ source: source, content: content })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Parse response:', data);
+        if (data.success && data.parsed_data) {
+            // Store parsed data
+            parsedExpenseData = data.parsed_data;
+            
+            // Get best suggestion from categorization_suggestions
+            let bestSuggestion = null;
+            if (data.categorization_suggestions && data.categorization_suggestions.length > 0) {
+                bestSuggestion = data.categorization_suggestions[0]; // First one is highest scored
+            }
+            
+            // Show preview
+            showPreview(data.parsed_data, bestSuggestion);
+            
+            // Switch to step 2
+            document.getElementById('parse-step').classList.add('hidden');
+            document.getElementById('preview-step').classList.remove('hidden');
+        } else {
+            alert(`❌ Could not parse message: ${data.message || 'Unknown error'}\n\nTip: Make sure your message contains "eSewa", "Khalti", or bank keywords like "debited from A/C"`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`❌ Error parsing message: ${error.message}`);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    });
+}
+
+function showPreview(parsedData, bestSuggestion) {
+    const previewDiv = document.getElementById('parsed-data');
+    
+    let html = `
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Amount:</span>
+                <span class="text-lg font-bold text-green-600 dark:text-green-400">Rs. ${parsedData.amount}</span>
+            </div>
+            <div>
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Merchant:</span>
+                <span class="font-medium text-gray-900 dark:text-white">${parsedData.merchant || 'Unknown'}</span>
+            </div>
+        </div>
+    `;
+    
+    if (parsedData.transaction_id) {
+        html += `
+            <div>
+                <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Transaction ID:</span>
+                <span class="font-mono text-sm text-gray-700 dark:text-gray-300">${parsedData.transaction_id}</span>
+            </div>
+        `;
+    }
+    
+    previewDiv.innerHTML = html;
+    
+    // Set suggested category if available
+    if (bestSuggestion && bestSuggestion.category) {
+        const categorySelect = document.getElementById('expense-category');
+        categorySelect.value = bestSuggestion.category.id;
+        
+        // Clear any existing confidence text
+        const existingConfidence = categorySelect.parentNode.querySelector('.confidence-text');
+        if (existingConfidence) {
+            existingConfidence.remove();
+        }
+        
+        // Show confidence if available
+        if (bestSuggestion.confidence || bestSuggestion.score) {
+            const confidenceText = document.createElement('span');
+            confidenceText.className = 'text-xs text-blue-600 dark:text-blue-400 ml-2 confidence-text';
+            const confidence = bestSuggestion.confidence || bestSuggestion.score;
+            confidenceText.textContent = `(${Math.round(confidence * 100)}% confidence)`;
+            categorySelect.parentNode.querySelector('label').appendChild(confidenceText);
+        }
+    }
+}
+
+function backToParseStep() {
+    document.getElementById('preview-step').classList.add('hidden');
+    document.getElementById('parse-step').classList.remove('hidden');
+}
+
+function createExpenseFromParsedData() {
+    if (!parsedExpenseData) {
+        alert('No parsed data available');
+        return;
+    }
+    
+    const selectedCategoryId = document.getElementById('expense-category').value;
+    const selectedCategoryName = document.getElementById('expense-category').options[document.getElementById('expense-category').selectedIndex].text;
+    
+    // Add loading state
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    
+    // Create expense with selected category
+    const expenseData = {
+        ...parsedExpenseData,
+        category_id: selectedCategoryId,
+        source: document.getElementById('message-source').value
+    };
+    
+    console.log('Creating expense with data:', expenseData);
+    
+    fetch('/test-create-from-sms', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({
+            content: document.getElementById('message-content').value,
+            category_id: selectedCategoryId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Create response:', data);
+        if (data.success) {
+            alert(`✅ Expense created successfully!\n\nAmount: Rs. ${data.amount}\nMerchant: ${data.merchant}\nCategory: ${selectedCategoryName}\n\n🧠 The system learned from your category choice!`);
+            closeMessageModal();
+            location.reload(); // Refresh to show the new expense
+        } else {
+            alert(`❌ Error creating expense: ${data.error || 'Unknown error'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`❌ Error creating expense: ${error.message}`);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    });
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('add-from-message-modal');
+    if (event.target === modal) {
+        closeMessageModal();
+    }
+});
+</script>
+
 @endsection

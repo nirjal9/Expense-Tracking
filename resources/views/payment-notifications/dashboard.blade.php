@@ -1,181 +1,205 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Payment Notifications</h1>
-        <p class="mt-2 text-gray-600 dark:text-gray-400">Automatically track expenses from email and SMS notifications</p>
-    </div>
+<x-slot name="header">
+    <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+        {{ __('Payment Notifications') }}
+    </h2>
+</x-slot>
 
-    <!-- Statistics Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
+<div class="py-12">
+    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="p-6 text-gray-900 dark:text-gray-100">
+                
+                <!-- Statistics Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-gray-50 dark:bg-gray-700 overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Gmail Status</dt>
+                                        <dd class="text-lg font-medium text-gray-900 dark:text-white">
+                                            <span id="gmail-status" class="text-yellow-600">Checking...</span>
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Gmail Status</dt>
-                            <dd class="text-lg font-medium text-gray-900 dark:text-white">
-                                <span id="gmail-status" class="text-yellow-600">Checking...</span>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
+                    <div class="bg-gray-50 dark:bg-gray-700 overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Auto-Created</dt>
+                                        <dd class="text-lg font-medium text-gray-900 dark:text-white" id="auto-created-count">
+                                            {{ $statistics['expenses']['total'] ?? 0 }}
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Auto-Created</dt>
-                            <dd class="text-lg font-medium text-gray-900 dark:text-white" id="auto-created-count">
-                                {{ $statistics['expenses']['total'] ?? 0 }}
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <div class="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
+                    <div class="bg-gray-50 dark:bg-gray-700 overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Pending Approval</dt>
+                                        <dd class="text-lg font-medium text-gray-900 dark:text-white" id="pending-count">
+                                            {{ $statistics['expenses']['pending'] ?? 0 }}
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Pending Approval</dt>
-                            <dd class="text-lg font-medium text-gray-900 dark:text-white" id="pending-count">
-                                {{ $statistics['expenses']['pending'] ?? 0 }}
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                            </svg>
+                    <div class="bg-gray-50 dark:bg-gray-700 overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Accuracy Rate</dt>
+                                        <dd class="text-lg font-medium text-gray-900 dark:text-white" id="accuracy-rate">
+                                            {{ number_format($statistics['categorization']['accuracy_rate'] ?? 0, 1) }}%
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Accuracy Rate</dt>
-                            <dd class="text-lg font-medium text-gray-900 dark:text-white" id="accuracy-rate">
-                                {{ number_format($statistics['categorization']['accuracy_rate'] ?? 0, 1) }}%
-                            </dd>
-                        </dl>
+                </div>
+
+                <!-- Gmail Authentication Section -->
+                <div class="bg-gray-50 dark:bg-gray-700 shadow rounded-lg mb-8">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Gmail Integration</h3>
+                        <div id="gmail-auth-section">
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                Connect your Gmail account to automatically process payment notification emails.
+                            </p>
+                            <button id="gmail-auth-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                Connect Gmail
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Gmail Authentication Section -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Gmail Integration</h3>
-            <div id="gmail-auth-section">
-                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Connect your Gmail account to automatically process payment notification emails.
-                </p>
-                <button id="gmail-auth-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                    Connect Gmail
-                </button>
-            </div>
-        </div>
-    </div>
+                <!-- Action Buttons -->
+                <div class="bg-gray-50 dark:bg-gray-700 shadow rounded-lg mb-8">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Process Notifications</h3>
+                        <div class="flex flex-wrap gap-4">
+                            <button id="process-emails-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50" disabled>
+                                Process Emails
+                            </button>
+                            <button id="test-parsing-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
+                                Test Parsing
+                            </button>
+                            <button id="create-test-expense-btn" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded">
+                                Create Test Expense
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-    <!-- Action Buttons -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-8">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Process Notifications</h3>
-            <div class="flex flex-wrap gap-4">
-                <button id="process-emails-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50" disabled>
-                    Process Emails
-                </button>
-                <button id="test-parsing-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
-                    Test Parsing
-                </button>
-                <button id="create-test-expense-btn" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded">
-                    Create Test Expense
-                </button>
+                <!-- Pending Approvals -->
+                @if(count($autoCreatedExpenses) > 0)
+                <div class="bg-gray-50 dark:bg-gray-700 shadow rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Pending Approvals</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                                <thead class="bg-gray-100 dark:bg-gray-600">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Merchant</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Amount</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Suggested Category</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Source</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
+                                    @foreach($autoCreatedExpenses as $expense)
+                                    <tr id="expense-row-{{ $expense['id'] }}">
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                            {{ $expense['merchant'] ?? 'Unknown' }}
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                            Rs. {{ number_format($expense['amount'], 2) }}
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                            <div class="flex items-center space-x-2">
+                                                <select id="category-{{ $expense['id'] }}" class="text-xs bg-gray-50 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded px-2 py-1">
+                                                    @foreach($categories ?? [] as $category)
+                                                        <option value="{{ $category->id }}" {{ ($expense['category_id'] ?? null) == $category->id ? 'selected' : '' }}>
+                                                            {{ $category->name }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @if(isset($expense['confidence_score']))
+                                                    <span class="text-xs text-gray-500">({{ round($expense['confidence_score'] * 100) }}%)</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                            {{ \Carbon\Carbon::parse($expense['date'])->format('M d, Y') }}
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                {{ ucfirst($expense['source'] ?? 'Unknown') }}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button onclick="approveExpenseWithCategory({{ $expense['id'] }})" class="text-green-600 hover:text-green-900 mr-3">Approve</button>
+                                            <button onclick="rejectExpense({{ $expense['id'] }})" class="text-red-600 hover:text-red-900">Reject</button>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                @endif
+                
             </div>
         </div>
     </div>
-
-    <!-- Pending Approvals -->
-    @if(count($autoCreatedExpenses) > 0)
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Pending Approvals</h3>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Merchant</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Amount</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Source</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        @foreach($autoCreatedExpenses as $expense)
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                {{ $expense['merchant'] ?? 'Unknown' }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                Rs. {{ number_format($expense['amount'], 2) }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                {{ \Carbon\Carbon::parse($expense['date'])->format('M d, Y') }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                    {{ ucfirst($expense['source'] ?? 'Unknown') }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <button onclick="approveExpense({{ $expense['id'] }})" class="text-green-600 hover:text-green-900 mr-3">Approve</button>
-                                <button onclick="rejectExpense({{ $expense['id'] }})" class="text-red-600 hover:text-red-900">Reject</button>
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    @endif
 </div>
 
 <!-- Test Parsing Modal -->
@@ -197,11 +221,11 @@
             <div class="flex justify-end space-x-3">
                 <button onclick="closeTestModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Cancel</button>
                 <button onclick="testParsing()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Test Parsing</button>
-                <button onclick="createFromSMS()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Create Expense from SMS</button>
+                <button onclick="createFromContent()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Create Expense</button>
             </div>
             <div id="test-results" class="mt-4 hidden">
                 <h4 class="font-medium text-gray-900 dark:text-white mb-2">Results:</h4>
-                <pre id="test-output" class="bg-gray-100 dark:bg-gray-700 p-3 rounded text-sm overflow-auto"></pre>
+                <pre id="test-output" class="bg-gray-100 dark:bg-gray-600 p-3 rounded text-sm overflow-auto"></pre>
             </div>
         </div>
     </div>
@@ -228,7 +252,7 @@
                         <li>Go to "Credentials" in your Google Cloud project</li>
                         <li>Click "Create Credentials" → "OAuth 2.0 Client ID"</li>
                         <li>Set application type to "Web application"</li>
-                        <li>Add authorized redirect URI: <code class="bg-gray-200 px-1 rounded">http://localhost:8001/payment-notifications/gmail/callback</code></li>
+                        <li>Add authorized redirect URI: <code class="bg-gray-200 px-1 rounded">http://localhost:8002/payment-notifications/gmail/callback</code></li>
                     </ol>
                 </div>
                 
@@ -237,13 +261,13 @@
                     <p class="text-yellow-700 mb-2">Add these lines to your <code class="bg-gray-200 px-1 rounded">.env</code> file:</p>
                     <pre class="bg-gray-100 p-3 rounded text-sm overflow-x-auto"><code>GOOGLE_CLIENT_ID=your_client_id_here
 GOOGLE_CLIENT_SECRET=your_client_secret_here
-GOOGLE_REDIRECT_URI=http://localhost:8001/payment-notifications/gmail/callback</code></pre>
+GOOGLE_REDIRECT_URI=http://localhost:8002/payment-notifications/gmail/callback</code></pre>
                 </div>
                 
                 <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
                     <h4 class="font-semibold text-purple-800 mb-2">Step 4: Restart Application</h4>
                     <p class="text-purple-700">After adding the credentials, restart your Laravel application:</p>
-                    <pre class="bg-gray-100 p-3 rounded text-sm mt-2"><code>php artisan serve --port=8001</code></pre>
+                    <pre class="bg-gray-100 p-3 rounded text-sm mt-2"><code>php artisan serve --port=8002</code></pre>
                 </div>
                 
                 <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -283,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('create-test-expense-btn').addEventListener('click', function() {
         createTestExpense();
     });
+    
 });
 
 function checkGmailStatus() {
@@ -382,6 +407,43 @@ function approveExpense(expenseId) {
     }
 }
 
+function approveExpenseWithCategory(expenseId) {
+    const categorySelect = document.getElementById(`category-${expenseId}`);
+    const selectedCategoryId = categorySelect.value;
+    const selectedCategoryName = categorySelect.options[categorySelect.selectedIndex].text;
+    
+    if (!selectedCategoryId) {
+        alert('Please select a category first');
+        return;
+    }
+    
+    if (confirm(`Approve this expense with category "${selectedCategoryName}"?\n\n🧠 This will teach the system for future predictions!`)) {
+        fetch(`/payment-notifications/expenses/${expenseId}/approve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+                category_id: selectedCategoryId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Expense approved successfully!\n\n🧠 Learning: The system learned that this merchant should be categorized as "${selectedCategoryName}"`);
+                location.reload();
+            } else {
+                alert(`Error: ${data.message}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error approving expense:', error);
+            alert('Error approving expense');
+        });
+    }
+}
+
 function rejectExpense(expenseId) {
     const reason = prompt('Please provide a reason for rejection (optional):');
     if (reason !== null) {
@@ -466,23 +528,27 @@ function createTestExpense() {
     }
 }
 
-function createFromSMS() {
+function createFromContent() {
     const content = document.getElementById('test-content').value;
     const source = document.getElementById('test-source').value;
     
     if (!content.trim()) {
-        alert('Please enter SMS content first');
+        alert('Please enter content first');
         return;
     }
     
-    if (source !== 'sms') {
-        alert('Please select "SMS" as the source for this feature');
+    const sourceText = source === 'sms' ? 'SMS' : 'email';
+    if (!confirm(`This will create a real expense from your ${sourceText} content. Continue?`)) {
         return;
     }
     
-    if (!confirm('This will create a real expense from your SMS content. Continue?')) {
-        return;
-    }
+    // Add loading state
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    
+    console.log('Sending request to create expense from content:', content);
     
     fetch('/test-create-from-sms', {
         method: 'POST',
@@ -494,19 +560,32 @@ function createFromSMS() {
             content: content
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
     .then(data => {
+        console.log('Response data:', data);
         if (data.success) {
-            alert('✅ Expense created from SMS successfully!\n\nExpense ID: ' + data.expense_id + '\nAmount: Rs. ' + data.amount + '\nMerchant: ' + data.merchant + '\nCategory: ' + data.category);
+            alert(`✅ Expense created from ${sourceText} successfully!\n\nExpense ID: ` + data.expense_id + '\nAmount: Rs. ' + data.amount + '\nMerchant: ' + data.merchant + '\nCategory: ' + data.category);
             location.reload(); // Refresh to show updated statistics
         } else {
-            alert('❌ Error creating expense from SMS: ' + (data.error || 'Unknown error'));
+            alert(`❌ Error creating expense from ${sourceText}: ` + (data.error || 'Unknown error'));
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('❌ Error creating expense from SMS: ' + error.message);
+        alert(`❌ Error creating expense from ${sourceText}: ` + error.message);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
     });
+}
+
+// Keep the old function for backward compatibility
+function createFromSMS() {
+    createFromContent();
 }
 
 // Close modals when clicking outside
@@ -551,6 +630,6 @@ function testParsing() {
         document.getElementById('test-results').classList.remove('hidden');
     });
 }
+
 </script>
 @endsection
-

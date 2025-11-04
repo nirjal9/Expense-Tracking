@@ -28,7 +28,14 @@ class AutoCategorizationService implements AutoCategorizationInterface
         $description = strtolower(trim($description));
         $combinedText = $merchant . ' ' . $description;
 
-        // Try exact merchant match first
+        // Try ML-based categorization first (most accurate)
+        $mlMatch = $this->findMLMatch($merchant, $description, $context);
+        if ($mlMatch) {
+            Log::info("ML categorization successful for: {$merchant} - {$description} -> {$mlMatch->name}");
+            return $mlMatch;
+        }
+
+        // Try exact merchant match
         $exactMatch = $this->findExactMerchantMatch($merchant);
         if ($exactMatch) {
             return $exactMatch;
@@ -44,12 +51,6 @@ class AutoCategorizationService implements AutoCategorizationInterface
         $fuzzyMatch = $this->findFuzzyMatch($merchant);
         if ($fuzzyMatch) {
             return $fuzzyMatch;
-        }
-
-        // Try ML-based categorization if available
-        $mlMatch = $this->findMLMatch($combinedText, $context);
-        if ($mlMatch) {
-            return $mlMatch;
         }
 
         return null;
@@ -134,15 +135,32 @@ class AutoCategorizationService implements AutoCategorizationInterface
     {
         $bestMatch = null;
         $bestScore = 0;
+        $allScores = []; // For debugging
 
         foreach ($this->categoryKeywords as $categoryId => $keywords) {
             $score = $this->calculateKeywordScore($text, $keywords);
+            $category = Category::find($categoryId);
             
-            if ($score > $bestScore && $score > 0.3) { // Minimum threshold
-                $bestScore = $score;
-                $bestMatch = Category::find($categoryId);
+            if ($category) {
+                $allScores[] = [
+                    'category' => $category->name,
+                    'score' => $score,
+                    'keywords' => $keywords
+                ];
+                
+                if ($score > $bestScore && $score > 0) { // Lowered threshold to 0 for better matching
+                    $bestScore = $score;
+                    $bestMatch = $category;
+                }
             }
         }
+
+        // Log the categorization process for debugging
+        Log::info("Keyword matching for text: '{$text}'", [
+            'best_match' => $bestMatch ? $bestMatch->name : 'none',
+            'best_score' => $bestScore,
+            'all_scores' => $allScores
+        ]);
 
         return $bestMatch;
     }
@@ -169,13 +187,24 @@ class AutoCategorizationService implements AutoCategorizationInterface
     }
 
     /**
-     * Find ML-based match (placeholder for future ML integration)
+     * Find ML-based match using trained categorization model
      */
-    private function findMLMatch(string $text, array $context): ?Category
+    private function findMLMatch(string $merchant, string $description, array $context): ?Category
     {
-        // This could integrate with your existing ML forecasting system
-        // For now, return null as placeholder
-        return null;
+        try {
+            $mlService = app(MLCategorizationService::class);
+            
+            if (!$mlService->isAvailable()) {
+                Log::info("ML categorization service not available, falling back to keyword matching");
+                return null;
+            }
+            
+            return $mlService->categorize($merchant, $description);
+            
+        } catch (\Exception $e) {
+            Log::error("ML categorization failed: " . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -223,39 +252,48 @@ class AutoCategorizationService implements AutoCategorizationInterface
     /**
      * Load category keywords
      */
-    private function loadCategoryKeywords(): void
+private function loadCategoryKeywords(): void
     {
-        $this->categoryKeywords = [
-            // Food & Dining
-            1 => ['restaurant', 'cafe', 'food', 'dining', 'pizza', 'burger', 'coffee', 'tea', 'lunch', 'dinner', 'breakfast'],
+        // Clear any cached data first
+        Cache::forget('category_keywords');
+        
+        // Load categories from database and map keywords by category name
+        $categories = Category::all();
+        $this->categoryKeywords = [];
+        
+        foreach ($categories as $category) {
+            $categoryName = strtolower($category->name);
             
-            // Transportation
-            2 => ['taxi', 'bus', 'petrol', 'fuel', 'gas', 'uber', 'transport', 'parking', 'toll', 'metro'],
+            // Map keywords based on category names
+            $keywords = [];
             
-            // Shopping
-            3 => ['store', 'shop', 'mall', 'market', 'clothing', 'fashion', 'electronics', 'grocery', 'supermarket'],
+            if (str_contains($categoryName, 'food') || str_contains($categoryName, 'dining') || str_contains($categoryName, 'restaurant')) {
+                $keywords = ['restaurant', 'cafe', 'food', 'dining', 'pizza', 'burger', 'coffee', 'tea', 'lunch', 'dinner', 'breakfast'];
+            } elseif (str_contains($categoryName, 'transport') || str_contains($categoryName, 'travel') || str_contains($categoryName, 'fuel')) {
+                // Comprehensive travel/transport keywords including fuel-related terms
+                $keywords = ['taxi', 'bus', 'petrol', 'fuel', 'gas', 'uber', 'transport', 'parking', 'toll', 'metro', 
+                           'hotel', 'flight', 'travel', 'ticket', 'booking', 'vacation', 'trip', 'airline', 'station'];
+            } elseif (str_contains($categoryName, 'shop') || str_contains($categoryName, 'retail') || str_contains($categoryName, 'store')) {
+                $keywords = ['store', 'shop', 'mall', 'market', 'clothing', 'fashion', 'electronics', 'grocery', 'supermarket'];
+            } elseif (str_contains($categoryName, 'health') || str_contains($categoryName, 'medical')) {
+                $keywords = ['hospital', 'clinic', 'pharmacy', 'medicine', 'doctor', 'medical', 'health', 'dental'];
+            } elseif (str_contains($categoryName, 'entertainment') || str_contains($categoryName, 'gym') || str_contains($categoryName, 'fitness')) {
+                $keywords = ['movie', 'cinema', 'theater', 'game', 'entertainment', 'music', 'sports', 'gym', 'fitness'];
+            } elseif (str_contains($categoryName, 'utility') || str_contains($categoryName, 'bill')) {
+                $keywords = ['electricity', 'water', 'internet', 'phone', 'mobile', 'utility', 'bill', 'rent'];
+            } elseif (str_contains($categoryName, 'education') || str_contains($categoryName, 'school')) {
+                $keywords = ['school', 'college', 'university', 'education', 'book', 'course', 'tuition', 'library'];
+            } elseif (str_contains($categoryName, 'insurance')) {
+                $keywords = ['insurance', 'premium', 'policy', 'claim', 'coverage'];
+            } elseif (str_contains($categoryName, 'investment') || str_contains($categoryName, 'saving')) {
+                $keywords = ['investment', 'stock', 'mutual fund', 'savings', 'deposit', 'withdrawal'];
+            }
             
-            // Healthcare
-            4 => ['hospital', 'clinic', 'pharmacy', 'medicine', 'doctor', 'medical', 'health', 'dental'],
-            
-            // Entertainment
-            5 => ['movie', 'cinema', 'theater', 'game', 'entertainment', 'music', 'sports', 'gym', 'fitness'],
-            
-            // Utilities
-            6 => ['electricity', 'water', 'internet', 'phone', 'mobile', 'utility', 'bill', 'rent'],
-            
-            // Education
-            7 => ['school', 'college', 'university', 'education', 'book', 'course', 'tuition', 'library'],
-            
-            // Travel
-            8 => ['hotel', 'flight', 'travel', 'ticket', 'booking', 'vacation', 'trip', 'airline'],
-            
-            // Insurance
-            9 => ['insurance', 'premium', 'policy', 'claim', 'coverage'],
-            
-            // Investment
-            10 => ['investment', 'stock', 'mutual fund', 'savings', 'deposit', 'withdrawal']
-        ];
+            // Add some general keywords based on category name
+            if (!empty($keywords)) {
+                $this->categoryKeywords[$category->id] = $keywords;
+            }
+        }
     }
 
     /**

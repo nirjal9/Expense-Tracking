@@ -93,9 +93,9 @@ class EsewaEmailParser
     {
         $patterns = [
             'amount' => '/Rs\.?\s*([0-9,]+\.?[0-9]*)/i',
-            'merchant' => '/to\s+([^.]+?)(?:\s+successful|\.|$)/i',
-            'transaction_id' => '/transaction\s*(?:id|no)\.?\s*:?\s*([A-Z0-9]+)/i',
-            'date' => '/(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/',
+            'merchant' => '/to\s+([A-Za-z0-9\s&\-\']+?)(?:\s+has\s+been|\s+successful|\.|$)/i',
+            'transaction_id' => '/(?:transaction\s*(?:id|no)|txn\s*id)\.?\s*:?\s*([A-Z0-9]+)/i',
+            'date' => '/(\d{1,2}[-\/](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-\/]\d{2,4}|\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/i',
             'time' => '/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i'
         ];
 
@@ -131,6 +131,17 @@ class EsewaEmailParser
         if (!$date) return null;
         
         try {
+            // Handle different date formats
+            if (preg_match('/(\d{1,2})[-\/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-\/](\d{2,4})/i', $date, $matches)) {
+                $day = $matches[1];
+                $month = $matches[2];
+                $year = $matches[3];
+                if (strlen($year) == 2) {
+                    $year = '20' . $year;
+                }
+                return \Carbon\Carbon::createFromFormat('d M Y', "$day $month $year")->format('Y-m-d');
+            }
+            
             return \Carbon\Carbon::createFromFormat('d/m/Y', $date)->format('Y-m-d') ?:
                    \Carbon\Carbon::createFromFormat('Y-m-d', $date)->format('Y-m-d') ?:
                    \Carbon\Carbon::parse($date)->format('Y-m-d');
@@ -155,7 +166,7 @@ class KhaltiEmailParser
         $patterns = [
             'amount' => '/Rs\.?\s*([0-9,]+\.?[0-9]*)/i',
             'merchant' => '/to\s+([^.]+?)(?:\s+successful|\.|$)/i',
-            'transaction_id' => '/transaction\s*(?:id|no)\.?\s*:?\s*([A-Z0-9]+)/i',
+            'transaction_id' => '/(?:transaction\s*(?:id|no)|txn\s*id)\.?\s*:?\s*([A-Z0-9]+)/i',
             'date' => '/(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/',
             'time' => '/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i'
         ];

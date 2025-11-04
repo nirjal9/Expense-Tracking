@@ -4,6 +4,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\ForecastController;
 use App\Http\Controllers\AdminController;
@@ -100,53 +101,116 @@ Route::middleware(['auth', 'check.initial.registration'])->group(function () {
     Route::post('/payment-notifications/test-parsing', [App\Http\Controllers\PaymentNotificationController::class, 'testParsing'])->name('payment-notifications.test-parsing');
     Route::get('/payment-notifications/statistics', [App\Http\Controllers\PaymentNotificationController::class, 'getStatistics'])->name('payment-notifications.statistics');
     
-    // Test route to create expense from actual SMS content
-    Route::post('/test-create-from-sms', function(Request $request) {
-        try {
-            $user = auth()->user();
-            if (!$user) {
-                return response()->json(['error' => 'Not authenticated'], 401);
-            }
-
-            $content = $request->input('content');
-            if (!$content) {
-                return response()->json(['error' => 'Content is required'], 400);
-            }
-
-            $paymentService = app(App\Services\PaymentNotification\PaymentNotificationService::class);
-            
-            // Parse the SMS content
-            $smsParser = new App\Services\PaymentNotification\SMSParserService();
-            $transactionData = $smsParser->parse($content, 'test');
-            
-            if (!$transactionData) {
-                return response()->json(['error' => 'Could not parse SMS content'], 400);
-            }
-
-            // Create expense from parsed data
-            $expense = $paymentService->createExpenseFromTransaction($transactionData, $user);
-            
-            if ($expense) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Expense created from SMS successfully',
-                    'expense_id' => $expense->id,
-                    'amount' => $expense->amount,
-                    'merchant' => $expense->merchant,
-                    'category' => $expense->category ? $expense->category->name : 'None',
-                    'parsed_data' => $transactionData
-                ]);
-            } else {
-                return response()->json(['error' => 'Failed to create expense'], 500);
-            }
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
 });
 
 // Webhook Routes (no auth required for external services)
 Route::post('/webhooks/payment-notifications', [App\Http\Controllers\PaymentNotificationController::class, 'webhook'])->name('webhooks.payment-notifications');
+
+// Test Routes (requires auth, no CSRF protection for AJAX)
+Route::post('/test-create-from-sms', function(Request $request) {
+    try {
+        // Get the authenticated user
+        $user = auth()->user();
+        
+        // If no authenticated user, return error
+        if (!$user) {
+            return response()->json(['error' => 'User not authenticated. Please login first.'], 401);
+        }
+
+        $content = $request->input('content');
+        if (!$content) {
+            return response()->json(['error' => 'Content is required'], 400);
+        }
+
+        // Try both SMS and Email parsing using properly injected services
+        $smsParser = app(App\Services\PaymentNotification\SMSParserService::class);
+        $emailParser = app(App\Services\PaymentNotification\EmailParserService::class);
+        
+        $transactionData = $smsParser->parse($content, 'test');
+        if (!$transactionData) {
+            $transactionData = $emailParser->parse($content, 'test');
+        }
+        
+        if (!$transactionData) {
+            return response()->json(['error' => 'Could not parse content as SMS or Email'], 400);
+        }
+
+        // Use auto-categorization service to determine the correct category
+        $categorizationService = app(\App\Services\PaymentNotification\AutoCategorizationService::class);
+        $category = $categorizationService->categorize(
+            $transactionData['merchant'] ?? '',
+            $transactionData['description'] ?? '',
+            ['user_id' => $user->id]
+        );
+
+        // If no category found, use the first available category as fallback
+        if (!$category) {
+            $category = \App\Models\Category::first();
+            if (!$category) {
+                return response()->json(['error' => 'No categories found. Please create a category first.'], 400);
+            }
+        }
+
+        // Create expense with minimal required fields
+        $expenseData = [
+            'user_id' => $user->id,
+            'amount' => (float)$transactionData['amount'],
+            'description' => $transactionData['description'] ?? 'Auto-created from notification',
+            'date' => $transactionData['date'] ?? now()->format('Y-m-d'),
+            'category_id' => $category->id,
+        ];
+
+        // Add auto-creation fields if they exist in the parsed data
+        if (isset($transactionData['merchant'])) {
+            $expenseData['merchant'] = $transactionData['merchant'];
+        }
+        if (isset($transactionData['transaction_id'])) {
+            $expenseData['transaction_id'] = $transactionData['transaction_id'];
+        }
+        
+        $expenseData['is_auto_created'] = true;
+        $expenseData['source'] = 'test';
+        $expenseData['requires_approval'] = false;
+        $expenseData['auto_created_at'] = now();
+
+        $expense = \App\Models\Expense::create($expenseData);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense created successfully',
+            'expense_id' => $expense->id,
+            'amount' => $expense->amount,
+            'merchant' => $expense->merchant ?? 'N/A',
+            'category' => $category->name,
+            'parsed_data' => $transactionData
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ], 500);
+    }
+})->middleware('auth')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+// API endpoint for merchant mappings
+Route::get('/api/merchant-mappings', function() {
+    try {
+        $mappings = App\Models\MerchantCategoryMapping::with('category')->get()->map(function($mapping) {
+            return [
+                'merchant' => $mapping->merchant,
+                'category' => $mapping->category->name ?? 'Unknown',
+                'confidence' => $mapping->confidence,
+                'usage_count' => $mapping->usage_count
+            ];
+        });
+        
+        return response()->json(['mappings' => $mappings]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
 
 // Test Routes (remove in production)
 Route::post('/test-sms-parsing', function(Request $request) {

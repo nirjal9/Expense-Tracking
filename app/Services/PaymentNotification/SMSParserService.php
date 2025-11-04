@@ -96,7 +96,7 @@ class EsewaSMSParser
         $patterns = [
             'amount' => '/Rs\.?\s*([0-9,]+\.?[0-9]*)/i',
             'merchant' => '/to\s+([^.]+?)(?:\s+successful|\.|$)/i',
-            'transaction_id' => '/transaction\s*(?:id|no)\.?\s*:?\s*([A-Z0-9]+)/i',
+            'transaction_id' => '/(?:transaction\s*(?:id|no)|txn\s*id)\.?\s*:?\s*([A-Z0-9]+)/i',
             'date' => '/(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/',
             'time' => '/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i'
         ];

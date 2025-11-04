@@ -96,8 +96,8 @@ class ForecastController extends Controller
             $totalsArray = $monthlyTotals->toArray();
             $cleanedTotals = $totalsArray;
 
-            //  Try ML forecasting first
-            $mlForecast = $mlService->getForecast($user, $category);
+            //  Try ML forecasting first (pass target date)
+            $mlForecast = $mlService->getForecast($user, $category, $date);
             $estimatedExpense = null;
             $forecastMethod = 'Statistical';
 
@@ -131,6 +131,22 @@ class ForecastController extends Controller
 
             $expensePercentage = $income > 0 ? ($actualExpense / $income) * 100 : 0;
 
+            // Convert R² score to confidence percentage (handle negative R²)
+            $mlConfidence = null;
+            if (isset($mlForecast['accuracy'])) {
+                $r2Score = $mlForecast['accuracy'];
+                // Convert R² to confidence: negative R² means poor model, cap at 0%
+                // Good R² (0.7+) = high confidence, poor R² (0.3-) = low confidence
+                if ($r2Score < 0) {
+                    $mlConfidence = 0.05; // 5% minimum confidence for any ML prediction
+                } elseif ($r2Score > 0.9) {
+                    $mlConfidence = 0.95; // 95% max confidence
+                } else {
+                    // Scale R² (0-0.9) to confidence (20%-95%)
+                    $mlConfidence = 0.20 + ($r2Score * 0.75);
+                }
+            }
+
             return [
                 'category' => $category->name,
                 'budget_percentage' => $budgetPercentage,
@@ -138,11 +154,19 @@ class ForecastController extends Controller
                 'actual_expense' => round($actualExpense, 2),
                 'expense_percentage' => round($expensePercentage, 2),
                 'forecast_method' => $forecastMethod,
-                'ml_confidence' => $mlForecast['accuracy'] ?? null,
+                'ml_confidence' => $mlConfidence,
+                'raw_r2_score' => $mlForecast['accuracy'] ?? null, // Keep original for debugging
             ];
         })->all();
 
-        return view('forecast.index', compact('forecasts', 'date'));
+        $response = response()->view('forecast.index', compact('forecasts', 'date'));
+        
+        // Disable browser caching completely
+        $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+        
+        return $response;
     }
 
     /**

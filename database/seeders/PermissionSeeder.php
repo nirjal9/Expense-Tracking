@@ -45,12 +45,14 @@ class PermissionSeeder extends Seeder
                 ) {
                     break;
                 }
-                Permission::updateOrCreate([
-                    'url' => $route['uri'],
-                    'name' => $route['name'],
-                    'group' => $route['folder'],
-                    'slug' => Str::slug(str_replace('.', ' ', $route['name'])),
-                ]);
+                if (!empty($route['name'])) {
+                    Permission::updateOrCreate([
+                        'url' => $route['uri'],
+                        'name' => $route['name'],
+                        'group' => $route['folder'],
+                        'slug' => Str::slug(str_replace('.', ' ', $route['name'])),
+                    ]);
+                }
 
 
 

@@ -27,8 +27,9 @@ class PaymentNotificationController extends Controller
         $user = Auth::user();
         $statistics = $this->paymentService->getStatistics($user);
         $autoCreatedExpenses = $this->paymentService->getAutoCreatedExpenses($user, 'pending');
+        $categories = $user->categories;
 
-        return view('payment-notifications.dashboard', compact('statistics', 'autoCreatedExpenses'));
+        return view('payment-notifications.dashboard', compact('statistics', 'autoCreatedExpenses', 'categories'));
     }
 
     /**
