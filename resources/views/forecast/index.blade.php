@@ -49,14 +49,14 @@
                             <span class="px-2 py-1 rounded text-xs {{ str_contains($forecast['forecast_method'] ?? '', 'Machine Learning') ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200' }}">
                                 {{ $forecast['forecast_method'] ?? 'Statistical' }}
                             </span>
-                            @if(isset($forecast['ml_confidence']) && $forecast['ml_confidence'])
-                                <br><small class="text-gray-500 dark:text-gray-400">
-                                    Confidence: {{ number_format($forecast['ml_confidence'] * 100, 1) }}%
-                                    @if(isset($forecast['raw_r2_score']) && $forecast['raw_r2_score'] < 0)
-                                        <span class="text-yellow-600 dark:text-yellow-400" title="Model R² score: {{ number_format($forecast['raw_r2_score'], 3) }}">⚠️</span>
-                                    @endif
-                                </small>
-                            @endif
+{{--                            @if(isset($forecast['ml_confidence']) && $forecast['ml_confidence'])--}}
+{{--                                <br><small class="text-gray-500 dark:text-gray-400">--}}
+{{--                                    Confidence: {{ number_format($forecast['ml_confidence'] * 100, 1) }}%--}}
+{{--                                    @if(isset($forecast['raw_r2_score']) && $forecast['raw_r2_score'] < 0)--}}
+{{--                                        <span class="text-yellow-600 dark:text-yellow-400" title="Model R² score: {{ number_format($forecast['raw_r2_score'], 3) }}">⚠️</span>--}}
+{{--                                    @endif--}}
+{{--                                </small>--}}
+{{--                            @endif--}}
                         </td>
                     </tr>
                 @endforeach

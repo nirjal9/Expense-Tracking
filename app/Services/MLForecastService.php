@@ -142,7 +142,7 @@ class MLForecastService
             
             $result = json_decode($output, true);
             
-            if ($result && !isset($result['error']) && isset($result['method']) && str_contains($result['method'], 'Cached')) {
+            if ($result && !isset($result['error']) && isset($result['prediction'])) {
                 // Verify the result has correct data_points before returning
                 $dataPoints = $result['data_points'] ?? 0;
                 $prediction = $result['prediction'] ?? 0;

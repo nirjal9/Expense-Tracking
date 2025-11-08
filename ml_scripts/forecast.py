@@ -504,6 +504,8 @@ class ExpenseForecaster:
             df_monthly = df_monthly[['date', 'amount']].sort_values('date')
             
             print(f"DEBUG: Aggregated to {len(df_monthly)} monthly data points", file=sys.stderr)
+            
+            # No data smoothing - use raw monthly data for accurate predictions
 
             # Provide defaults for optional engineered fields
             df_monthly['budget_percentage'] = 0.0
@@ -514,6 +516,7 @@ class ExpenseForecaster:
         except Exception as e:
             print(f"ERROR in get_user_data: {str(e)}", file=sys.stderr)
             return None
+    
     
     def prepare_features(self, df):
         """Create features for ML model"""
@@ -531,24 +534,26 @@ class ExpenseForecaster:
         df['year'] = df['date'].dt.year
         df['day_of_week'] = df['date'].dt.dayofweek
         
-        # Time-based features
-        df['previous_month'] = df['amount'].shift(1)
-        df['previous_2months'] = df['amount'].shift(2)
-        df['previous_3months'] = df['amount'].shift(3)
+        # Time-based features - use forward fill to handle NaNs at the start
+        first_amount = df['amount'].iloc[0] if len(df) > 0 else 0.0
+        df['previous_month'] = df['amount'].shift(1).fillna(first_amount)
+        df['previous_2months'] = df['amount'].shift(2).fillna(first_amount)
+        df['previous_3months'] = df['amount'].shift(3).fillna(first_amount)
         
         # Use only past values for rolling features to avoid leakage
-        past_amount = df['amount'].shift(1)
-        df['rolling_3m'] = past_amount.rolling(3, min_periods=2).mean()  # Reduced min_periods
-        df['rolling_6m'] = past_amount.rolling(6, min_periods=3).mean()  # Reduced min_periods
+        past_amount = df['amount'].shift(1).fillna(first_amount)
+        
+        df['rolling_3m'] = past_amount.rolling(3, min_periods=1).mean().fillna(first_amount)
+        df['rolling_6m'] = past_amount.rolling(6, min_periods=1).mean().fillna(first_amount)
         # Only add rolling_12m if we have enough data (12+ months)
         if len(df) >= 12:
-            df['rolling_12m'] = past_amount.rolling(12, min_periods=12).mean()
+            df['rolling_12m'] = past_amount.rolling(12, min_periods=1).mean().fillna(first_amount)
         else:
             df['rolling_12m'] = df['rolling_6m']  # Use 6m as fallback
         
         # Volatility features based on past values only
-        df['rolling_std_3m'] = past_amount.rolling(3, min_periods=2).std()  # Reduced min_periods
-        df['rolling_std_6m'] = past_amount.rolling(6, min_periods=3).std()  # Reduced min_periods
+        df['rolling_std_3m'] = past_amount.rolling(3, min_periods=1).std().fillna(0.0)
+        df['rolling_std_6m'] = past_amount.rolling(6, min_periods=1).std().fillna(0.0)
         
         # Trend feature on past 3 months only
         def slope_last_n(values):
@@ -558,7 +563,7 @@ class ExpenseForecaster:
             x = np.arange(n)
             m, _ = np.polyfit(x, values, 1)
             return m
-        df['trend_3m'] = past_amount.rolling(3, min_periods=3).apply(slope_last_n, raw=True)
+        df['trend_3m'] = past_amount.rolling(3, min_periods=1).apply(slope_last_n, raw=True).fillna(0.0)
         
         # Seasonal features
         df['is_holiday_season'] = df['month'].isin([11, 12, 1])  # Nov, Dec, Jan
@@ -813,8 +818,14 @@ class ExpenseForecaster:
             # Scale features
             last_features_scaled = self.scaler.transform(last_features)
             
-            # Make prediction
-            prediction = model.predict(last_features_scaled)[0]
+            # Make prediction (handle both array and scalar returns)
+            pred_result = model.predict(last_features_scaled)
+            if np.isscalar(pred_result):
+                prediction = float(pred_result)
+            elif isinstance(pred_result, np.ndarray):
+                prediction = float(pred_result[0]) if len(pred_result) > 0 else 0.0
+            else:
+                prediction = float(pred_result)
             
             # Ensure prediction is non-negative
             prediction = max(0, prediction)
@@ -846,72 +857,73 @@ class ExpenseForecaster:
             }
             
         try:
-            # Filter out obvious outliers (incomplete months) - months with amounts < 10% of median
+            # For high-variance financial data, use a more lenient outlier filter
+            # Only filter extremely low values that are clearly incomplete months
             median_target = np.median(targets)
-            threshold = max(median_target * 0.1, 1000)  # At least Rs.1000 threshold
+            mean_target = np.mean(targets)
             
-            # Create mask to exclude outliers (incomplete months)
+            # Use a more conservative threshold: 5% of median or Rs.500 (whichever is higher)
+            # This prevents filtering legitimate low-spending months
+            threshold = max(median_target * 0.05, 500)
+            
+            # Create mask to exclude only obvious incomplete months
             valid_mask = targets >= threshold
             
-            # If filtering removes too much (>30%), don't filter
-            if np.sum(valid_mask) < len(targets) * 0.7:
+            # If filtering removes more than 20%, don't filter (preserve data)
+            if np.sum(valid_mask) < len(targets) * 0.8:
                 valid_mask = np.ones(len(targets), dtype=bool)
             
             # Use filtered data for evaluation
             features_filtered = features[valid_mask]
             targets_filtered = targets[valid_mask]
             
-            # For small datasets (<10 points), use cross-validation instead of train-test split
+            # For small datasets (<10 points), use a more robust evaluation
             if len(features_filtered) < 10:
                 local_scaler = StandardScaler()
                 features_scaled = local_scaler.fit_transform(features_filtered)
                 
-                # Use cross-validation with fewer folds for small datasets
-                cv_folds = min(3, max(2, len(features_filtered) - 1))
-                cv_scores = cross_val_score(model, features_scaled, targets_filtered, cv=cv_folds, scoring='r2')
-                r2 = float(np.mean(cv_scores))
-                
-                # Calculate MAE and RMSE from cross-validation predictions
-                # Train on all data and use leave-one-out for small sets
-                if len(features_filtered) <= 5:
-                    # For very small datasets, calculate on training error (less ideal but better than nothing)
+                # For very small datasets, use a more lenient evaluation
+                # Train on all but last month, test on last month
+                if len(features_filtered) >= 4:
+                    # Use last 2-3 months as test set
+                    test_size = min(3, max(1, len(features_filtered) // 4))
+                    train_size = len(features_filtered) - test_size
+                    
+                    X_train_cv = features_scaled[:train_size]
+                    y_train_cv = targets_filtered[:train_size]
+                    X_test_cv = features_scaled[train_size:]
+                    y_test_cv = targets_filtered[train_size:]
+                    
+                    # Train model
+                    model_cv = LinearRegression() if hasattr(model, 'coefficients_') else RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
+                    model_cv.fit(X_train_cv, y_train_cv)
+                    predictions_cv = model_cv.predict(X_test_cv)
+                    
+                    # Calculate R² on test set
+                    ss_res = np.sum((y_test_cv - predictions_cv) ** 2)
+                    ss_tot = np.sum((y_test_cv - np.mean(y_test_cv)) ** 2)
+                    r2 = float(1 - (ss_res / ss_tot)) if ss_tot > 0 else 0.0
+                    
+                    # Use raw R² from test set (no manipulation)
+                    mae = mean_absolute_error(y_test_cv, predictions_cv)
+                    rmse = np.sqrt(mean_squared_error(y_test_cv, predictions_cv))
+                else:
+                    # For very small datasets (<4 months), use simple training error with regularization
                     model.fit(features_scaled, targets_filtered)
                     predictions = model.predict(features_scaled)
+                    
+                    # Calculate R² (raw, no manipulation)
+                    ss_res = np.sum((targets_filtered - predictions) ** 2)
+                    ss_tot = np.sum((targets_filtered - np.mean(targets_filtered)) ** 2)
+                    r2 = float(1 - (ss_res / ss_tot)) if ss_tot > 0 else 0.0
+                    
                     mae = mean_absolute_error(targets_filtered, predictions)
                     rmse = np.sqrt(mean_squared_error(targets_filtered, predictions))
-                else:
-                    # Use cross-validation to estimate errors
-                    mae_list = []
-                    rmse_list = []
-                    for i in range(cv_folds):
-                        test_start = i * (len(features_filtered) // cv_folds)
-                        test_end = (i + 1) * (len(features_filtered) // cv_folds) if i < cv_folds - 1 else len(features_filtered)
-                        test_indices = list(range(test_start, test_end))
-                        train_indices = [j for j in range(len(features_filtered)) if j not in test_indices]
-                        
-                        X_train_cv = features_scaled[train_indices]
-                        y_train_cv = targets_filtered[train_indices]
-                        X_test_cv = features_scaled[test_indices]
-                        y_test_cv = targets_filtered[test_indices]
-                        
-                        model_cv = LinearRegression() if hasattr(model, 'coefficients_') else RandomForestRegressor(n_estimators=10, max_depth=5, random_state=42)
-                        model_cv.fit(X_train_cv, y_train_cv)
-                        pred_cv = model_cv.predict(X_test_cv)
-                        
-                        mae_list.append(mean_absolute_error(y_test_cv, pred_cv))
-                        rmse_list.append(np.sqrt(mean_squared_error(y_test_cv, pred_cv)))
-                    
-                    mae = float(np.mean(mae_list))
-                    rmse = float(np.mean(rmse_list))
                 
                 # Calculate MAPE
                 model.fit(features_scaled, targets_filtered)
                 predictions = model.predict(features_scaled)
                 mape = np.mean(np.abs((targets_filtered - predictions) / np.maximum(targets_filtered, 1))) * 100
-                
-                # Cap extremely negative R² scores for reporting
-                if r2 < -10:
-                    r2 = -10.0
                 
                 return {
                     'mae': float(mae),
@@ -920,7 +932,7 @@ class ExpenseForecaster:
                     'r2_score': float(r2)
                 }
             
-            # For larger datasets, use train-test split
+            # For larger datasets (10+ points), use train-test split
             split_idx = int(len(features_filtered) * 0.8)
             if split_idx < 3:
                 split_idx = 3
@@ -934,6 +946,7 @@ class ExpenseForecaster:
                 features_scaled = local_scaler.fit_transform(features_filtered)
                 cv_scores = cross_val_score(model, features_scaled, targets_filtered, cv=min(3, len(features_filtered)-1), scoring='r2')
                 r2 = float(np.mean(cv_scores))
+                
                 std_targets = float(np.std(targets_filtered)) if np.std(targets_filtered) > 0 else 1.0
                 mae = std_targets * max(0.0, (1 - r2)) * 0.5
                 rmse = std_targets * max(0.0, (1 - r2)) * 0.7
@@ -956,14 +969,10 @@ class ExpenseForecaster:
             # Make predictions on test data
             predictions = model.predict(X_test_scaled)
             
-            # Calculate metrics on test data
+            # Calculate metrics on test data (no manipulation - use raw R²)
             mae = mean_absolute_error(y_test, predictions)
             rmse = np.sqrt(mean_squared_error(y_test, predictions))
             r2 = r2_score(y_test, predictions)
-            
-            # Cap extremely negative R² scores for reporting
-            if r2 < -10:
-                r2 = -10.0
             
             # Calculate MAPE
             mape = np.mean(np.abs((y_test - predictions) / np.maximum(y_test, 1))) * 100
@@ -1029,9 +1038,14 @@ class ExpenseForecaster:
             
             print("DEBUG: Training fresh model", file=sys.stderr)
             
-            # For training, use ALL available data (no date filter) to ensure we have enough data points
-            # This ensures the model learns from all historical patterns
-            df = self.get_user_data(user_id, category_id, None, None)
+            # For training, use filtered data up to target month (if specified) to ensure correct data_points count
+            # This ensures the model is trained on the same data that will be used for prediction
+            if target_month and target_year:
+                df = self.get_user_data(user_id, category_id, target_month, target_year)
+            else:
+                # If no target specified, use all data
+                df = self.get_user_data(user_id, category_id, None, None)
+            
             if df is None:
                 return {'error': 'No data available for forecasting'}
             
@@ -1052,14 +1066,7 @@ class ExpenseForecaster:
             # Save the trained model
             model_path = self.save_model(best_model, best_model_name, user_id, category_id, features, targets, performance)
             
-            # For prediction, use filtered data up to target month (if specified)
-            # This ensures we don't use future data in the prediction
-            if target_month and target_year:
-                df_pred = self.get_user_data(user_id, category_id, target_month, target_year)
-                if df_pred is not None:
-                    features_pred, targets_pred = self.prepare_features(df_pred)
-                    if features_pred is not None and len(features_pred) >= 1:
-                        features, targets = features_pred, targets_pred
+            # Use the same features/targets for prediction (already filtered if target_month specified)
             
             # Make prediction
             prediction = self.make_prediction(best_model, features, targets, target_month, target_year)
